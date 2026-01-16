@@ -8,7 +8,9 @@ const CONFIG = {
     midiName: 'XONE',
     slot1: { note: 14, channel: 15 },
     slot2: { note: 15, channel: 15 },
-    holdThresholdMs: 500
+    holdThresholdMs: 1000,  // 1 second hold to clear
+    ledVelocityOn: 127,
+    ledVelocityOff: 0
 };
 
 // --- SETUP ---
@@ -27,9 +29,35 @@ const output = new easymidi.Output(deviceName);
 
 // State: 0=EMPTY, 1=RECORDING, 2=PLAYING, 3=STOPPED
 let slots = [
-    { id: 1, state: 0, note: CONFIG.slot1.note, pressTime: null },
-    { id: 2, state: 0, note: CONFIG.slot2.note, pressTime: null }
+    { id: 1, state: 0, note: CONFIG.slot1.note, channel: CONFIG.slot1.channel, holdTimer: null, actionFired: false },
+    { id: 2, state: 0, note: CONFIG.slot2.note, channel: CONFIG.slot2.channel, holdTimer: null, actionFired: false }
 ];
+
+// --- LED CONTROL ---
+function setLED(slot, on) {
+    output.send('noteon', {
+        note: slot.note,
+        velocity: on ? CONFIG.ledVelocityOn : CONFIG.ledVelocityOff,
+        channel: slot.channel
+    });
+}
+
+function flashLED(slot, times, intervalMs) {
+    let count = 0;
+    const flash = () => {
+        if (count >= times * 2) {
+            setLED(slot, false);  // End with LED off
+            return;
+        }
+        setLED(slot, count % 2 === 0);  // Toggle on/off
+        count++;
+        setTimeout(flash, intervalMs);
+    };
+    flash();
+}
+
+// Initialize LEDs to off on startup
+slots.forEach(slot => setLED(slot, false));
 
 // --- LOGIC ---
 
@@ -39,11 +67,25 @@ input.on('noteon', (msg) => {
     if (!slot) return;
 
     if (msg.velocity === 0) {
-        // This is actually a button release (some devices send vel 0 instead of noteoff)
+        // This is actually a button release
         handleRelease(slot);
     } else {
-        // Button pressed
-        slot.pressTime = Date.now();
+        // Button pressed - start hold timer
+        slot.actionFired = false;
+
+        // Start a timer that fires clear after holdThresholdMs
+        slot.holdTimer = setTimeout(() => {
+            handleClear(slot);
+            slot.actionFired = true;
+            slot.holdTimer = null;
+        }, CONFIG.holdThresholdMs);
+
+        // For STOPPED state, trigger resume immediately on press for low latency
+        // For PLAYING state, wait for release so hold-to-clear keeps playing
+        if (slot.state === 3) {
+            handleTap(slot);
+            slot.actionFired = true;
+        }
     }
 });
 
@@ -55,24 +97,29 @@ input.on('noteoff', (msg) => {
 });
 
 function handleRelease(slot) {
-    if (slot.pressTime === null) return;
+    // Cancel hold timer if still running
+    if (slot.holdTimer) {
+        clearTimeout(slot.holdTimer);
+        slot.holdTimer = null;
+    }
 
-    const holdDuration = Date.now() - slot.pressTime;
-    slot.pressTime = null;
-
-    if (holdDuration >= CONFIG.holdThresholdMs) {
-        handleClear(slot);
-    } else {
+    // If action wasn't already fired, fire it now (for EMPTY and RECORDING states)
+    if (!slot.actionFired) {
         handleTap(slot);
     }
+
+    slot.actionFired = false;
 }
 
 function handleClear(slot) {
     const addr = `/slot${slot.id}`;
-    console.log(`[Slot ${slot.id}] CLEARED (Hold detected)`);
+    console.log(`[Slot ${slot.id}] CLEARED (Hold 1s)`);
     client.send(addr, 'rec', 0);
     client.send(addr, 'play', 0);
     slot.state = 0;
+
+    // Flash LED 3 times to indicate clear
+    flashLED(slot, 3, 100);
 }
 
 function handleTap(slot) {
@@ -82,27 +129,32 @@ function handleTap(slot) {
         console.log(`[Slot ${slot.id}] Rec Start`);
         client.send(addr, 'rec', 1);
         slot.state = 1;
+        setLED(slot, true);
     }
     else if (slot.state === 1) {
         console.log(`[Slot ${slot.id}] Rec Stop -> Play`);
         client.send(addr, 'rec', 0);
         client.send(addr, 'play', 1);
         slot.state = 2;
+        setLED(slot, true);
     }
     else if (slot.state === 2) {
         console.log(`[Slot ${slot.id}] Stopped`);
         client.send(addr, 'play', 0);
         slot.state = 3;
+        setLED(slot, false);
     }
     else if (slot.state === 3) {
         console.log(`[Slot ${slot.id}] Resuming`);
         client.send(addr, 'play', 1);
         slot.state = 2;
+        setLED(slot, true);
     }
 }
 
 console.log('');
 console.log('Controls:');
 console.log('  TAP: Record -> Play -> Stop -> Resume');
-console.log('  HOLD (500ms): Clear slot for new recording');
+console.log('  HOLD 1s: Clear slot (triggers automatically, no release needed)');
+console.log('  LED: ON when recording/playing, OFF when stopped/empty');
 console.log('');
