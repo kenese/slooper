@@ -9,5 +9,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "commonjs",
+  "dependencies": {
+    "easymidi": "^3.1.0",
+    "node-osc": "^11.2.2"
+  }
 }
