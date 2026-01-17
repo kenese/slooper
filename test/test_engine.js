@@ -151,5 +151,36 @@ test('can clear slot (rec 0 + play 0)', async () => {
     // Slot should now be in empty/cleared state
 });
 
+// --- Crop Tests ---
+
+test('can send crop command to adjust loop length', async () => {
+    // Record a loop first
+    await sendOSC('/slot1', 'rec', 1);
+    await new Promise(r => setTimeout(r, 1000));
+    await sendOSC('/slot1', 'rec', 0);
+    await sendOSC('/slot1', 'play', 1);
+
+    // Send crop adjustments
+    await sendOSC('/slot1', 'crop', 50);   // Extend by 50ms
+    await new Promise(r => setTimeout(r, 100));
+    await sendOSC('/slot1', 'crop', -100); // Shorten by 100ms
+
+    // Visual verification: check Pd console for CROP_LENGTH changes
+    await sendOSC('/slot1', 'play', 0);
+});
+
+test('crop bounds test - cannot go below 100ms', async () => {
+    await sendOSC('/slot1', 'rec', 1);
+    await new Promise(r => setTimeout(r, 200));
+    await sendOSC('/slot1', 'rec', 0);
+    await sendOSC('/slot1', 'play', 1);
+
+    // Try to crop well below minimum
+    await sendOSC('/slot1', 'crop', -5000);
+
+    // Visual verification: CROP_LENGTH should be clipped to 100ms minimum
+    await sendOSC('/slot1', 'play', 0);
+});
+
 // Run
 runTests();

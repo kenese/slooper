@@ -5,12 +5,15 @@ const { Client } = require('node-osc');
 const CONFIG = {
     oscIp: '127.0.0.1',
     oscPort: 9000,
-    midiName: 'XONE',
-    slot1: { note: 14, channel: 15 },
-    slot2: { note: 15, channel: 15 },
-    holdThresholdMs: 1000,  // 1 second hold to clear
+    midiName: 'TRAKTOR X1 MK3',
+    // midiName: 'XONE'
+    slot1: { note: 10, channel: 0, encoderCC: 20 },  // UPDATE encoderCC after running midi_logger
+    // slot1: { note: 14, channel: 15, encoderCC: 8 },  // UPDATE encoderCC after running midi_logger
+    slot2: { note: 15, channel: 15, encoderCC: 8 },  // UPDATE encoderCC after running midi_logger
+    holdThresholdMs: 1000,
     ledVelocityOn: 127,
-    ledVelocityOff: 0
+    ledVelocityOff: 0,
+    cropStepMs: 50  // Milliseconds per encoder tick
 };
 
 // --- SETUP ---
@@ -96,6 +99,17 @@ input.on('noteoff', (msg) => {
     handleRelease(slot);
 });
 
+// Handle encoder for loop length adjustment
+input.on('cc', (msg) => {
+    let slot = null;
+    if (msg.controller === CONFIG.slot1.encoderCC) {
+        slot = slots[0];
+    } else if (msg.controller === CONFIG.slot2.encoderCC) {
+        slot = slots[1];
+    }
+    if (slot) handleEncoder(slot, msg.value);
+});
+
 function handleRelease(slot) {
     // Cancel hold timer if still running
     if (slot.holdTimer) {
@@ -109,6 +123,25 @@ function handleRelease(slot) {
     }
 
     slot.actionFired = false;
+}
+
+function handleEncoder(slot, value) {
+    // Only adjust if slot is actively playing (state 2=PLAYING)
+    if (slot.state !== 2) return;
+
+    // Calculate delta for endless encoder (64 = no change, <64 = CCW, >64 = CW)
+    let delta = 0;
+    if (value > 64) {
+        delta = CONFIG.cropStepMs;  // Clockwise = extend
+    } else if (value < 64) {
+        delta = -CONFIG.cropStepMs;  // Counter-clockwise = shorten
+    }
+
+    if (delta !== 0) {
+        const addr = `/slot${slot.id}`;
+        console.log(`[Slot ${slot.id}] Crop: ${delta > 0 ? '+' : ''}${delta}ms`);
+        client.send(addr, 'crop', delta);
+    }
 }
 
 function handleClear(slot) {
@@ -156,5 +189,6 @@ console.log('');
 console.log('Controls:');
 console.log('  TAP: Record -> Play -> Stop -> Resume');
 console.log('  HOLD 1s: Clear slot (triggers automatically, no release needed)');
+console.log('  ENCODER: Adjust loop length ± (CW=extend, CCW=shorten)');
 console.log('  LED: ON when recording/playing, OFF when stopped/empty');
 console.log('');
