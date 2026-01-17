@@ -11,11 +11,25 @@
  * - DSP must be enabled
  */
 
-const { Client } = require('node-osc');
+const { Client, Server } = require('node-osc');
 const assert = require('assert');
 
-const OSC_PORT = 9000;
-const client = new Client('127.0.0.1', OSC_PORT);
+const OSC_SEND_PORT = 9000;
+const OSC_RECEIVE_PORT = 9001;
+const client = new Client('127.0.0.1', OSC_SEND_PORT);
+
+// OSC server to receive state responses from Pure Data
+let stateMessages = [];
+const server = new Server(OSC_RECEIVE_PORT, '127.0.0.1', () => {
+    // Server ready
+});
+
+server.on('message', (msg) => {
+    const [addr, ...args] = msg;
+    if (addr === '/state') {
+        stateMessages.push(args);
+    }
+});
 
 // Simple test runner
 const tests = [];
@@ -30,8 +44,12 @@ async function runTests() {
     console.log('🧪 Slooper Engine Tests\n');
     console.log('⚠️  Make sure Pure Data is running with engine.pd loaded!\n');
 
+    // Wait a moment for the OSC server to start
+    await new Promise(r => setTimeout(r, 200));
+
     for (const t of tests) {
         try {
+            stateMessages = [];  // Clear state for each test
             await t.fn();
             console.log(`✅ ${t.name}`);
             passed++;
@@ -44,6 +62,7 @@ async function runTests() {
 
     console.log(`\n📊 Results: ${passed} passed, ${failed} failed`);
     client.close();
+    server.close();
     process.exit(failed > 0 ? 1 : 0);
 }
 
@@ -54,6 +73,40 @@ function sendOSC(addr, ...args) {
             setTimeout(resolve, 100); // Give Pd time to process
         });
     });
+}
+
+// Helper to wait for a specific state message from Pure Data
+function expectState(expectedSlot, expectedState, timeoutMs = 1000) {
+    return new Promise((resolve, reject) => {
+        const startTime = Date.now();
+
+        const check = () => {
+            // Look for matching state message
+            const match = stateMessages.find(args =>
+                args[0] === expectedSlot && args[1] === expectedState
+            );
+
+            if (match) {
+                resolve(match);
+                return;
+            }
+
+            if (Date.now() - startTime > timeoutMs) {
+                reject(new Error(`Timeout waiting for state: ${expectedSlot} ${expectedState}. Received: ${JSON.stringify(stateMessages)}`));
+                return;
+            }
+
+            setTimeout(check, 50);
+        };
+
+        check();
+    });
+}
+
+// Helper to get the length from state messages
+function getLastLength() {
+    const lengthMsg = stateMessages.find(args => args[1] === 'length');
+    return lengthMsg ? lengthMsg[2] : null;
 }
 
 // --- Basic OSC Tests ---
@@ -222,6 +275,50 @@ test('can send monitor on/off commands', async () => {
     await new Promise(r => setTimeout(r, 100));
     await sendOSC('/monitor', 0);  // Disable monitoring
     // Visual verification: check Pd console for MONITOR output
+});
+
+// --- State Verification Tests ---
+
+test('Pd responds with recording state on rec 1', async () => {
+    await sendOSC('/slot1', 'rec', 1);
+    await expectState('slot1', 'recording');
+    await sendOSC('/slot1', 'rec', 0);  // Clean up
+});
+
+test('Pd responds with stopped state and length on rec 0', async () => {
+    await sendOSC('/slot1', 'rec', 1);
+    await new Promise(r => setTimeout(r, 300));  // Record for 300ms
+    await sendOSC('/slot1', 'rec', 0);
+    await expectState('slot1', 'stopped');
+    await expectState('slot1', 'length');
+
+    const length = getLastLength();
+    assert.ok(length > 0, `Length should be > 0, got ${length}`);
+});
+
+test('Pd responds with playing state on play 1', async () => {
+    // First record something
+    await sendOSC('/slot1', 'rec', 1);
+    await new Promise(r => setTimeout(r, 200));
+    await sendOSC('/slot1', 'rec', 0);
+
+    stateMessages = [];  // Clear messages
+    await sendOSC('/slot1', 'play', 1);
+    await expectState('slot1', 'playing');
+
+    await sendOSC('/slot1', 'play', 0);  // Clean up
+});
+
+test('Pd responds with paused state on play 0', async () => {
+    // First record and play
+    await sendOSC('/slot1', 'rec', 1);
+    await new Promise(r => setTimeout(r, 200));
+    await sendOSC('/slot1', 'rec', 0);
+    await sendOSC('/slot1', 'play', 1);
+
+    stateMessages = [];  // Clear messages
+    await sendOSC('/slot1', 'play', 0);
+    await expectState('slot1', 'paused');
 });
 
 // Run

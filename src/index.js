@@ -16,7 +16,9 @@ const CONFIG = {
     ledVelocityOff: 0,
     cropStepMs: 50,  // Milliseconds per encoder tick
     monitor1: { note: 11, channel: 0 },
-    monitor2: { note: 11, channel: 1 }
+    monitor2: { note: 11, channel: 1 },
+    encoderPress1: { note: 20, channel: 0 },
+    encoderPress2: { note: 21, channel: 0 }
 };
 
 // --- SETUP ---
@@ -44,6 +46,12 @@ let monitorEnabled = [false, false];  // per slot
 let monitors = [
     { id: 1, note: CONFIG.monitor1.note, channel: CONFIG.monitor1.channel },
     { id: 2, note: CONFIG.monitor2.note, channel: CONFIG.monitor2.channel }
+];
+
+// Crop tracking per slot
+let cropState = [
+    { recordStartTime: 0, originalLength: 0, cropOffset: 0 },
+    { recordStartTime: 0, originalLength: 0, cropOffset: 0 }
 ];
 
 // --- LED CONTROL ---
@@ -82,6 +90,18 @@ input.on('noteon', (msg) => {
     if (monitor && msg.velocity > 0) {
         handleMonitorToggle(monitor);
         return;
+    }
+
+    // Check if it's an encoder press (reset loop length)
+    if (msg.velocity > 0) {
+        if (msg.note === CONFIG.encoderPress1.note && msg.channel === CONFIG.encoderPress1.channel) {
+            handleEncoderPress(slots[0]);
+            return;
+        }
+        if (msg.note === CONFIG.encoderPress2.note && msg.channel === CONFIG.encoderPress2.channel) {
+            handleEncoderPress(slots[1]);
+            return;
+        }
     }
 
     let slot = slots.find(s => s.note === msg.note && s.channel === msg.channel);
@@ -157,9 +177,24 @@ function handleEncoder(slot, value) {
 
     if (delta !== 0) {
         const addr = `/slot${slot.id}`;
-        console.log(`[Slot ${slot.id}] Crop: ${delta > 0 ? '+' : ''}${delta}ms`);
+        const idx = slot.id - 1;
+        cropState[idx].cropOffset += delta;
+        const currentLength = cropState[idx].originalLength + cropState[idx].cropOffset;
+        const offsetStr = cropState[idx].cropOffset >= 0 ? `+${cropState[idx].cropOffset}` : cropState[idx].cropOffset;
+        console.log(`[Slot ${slot.id}] loop: ${currentLength}ms [crop ${offsetStr}ms]`);
         client.send(addr, 'crop', delta);
     }
+}
+
+function handleEncoderPress(slot) {
+    // Only reset if slot is actively playing (state 2=PLAYING)
+    if (slot.state !== 2) return;
+
+    const addr = `/slot${slot.id}`;
+    const idx = slot.id - 1;
+    cropState[idx].cropOffset = 0;
+    console.log(`[Slot ${slot.id}] loop: ${cropState[idx].originalLength}ms [crop 0ms] (reset)`);
+    client.send(addr, 'reset', 1);
 }
 
 function handleMonitorToggle(monitor) {
@@ -180,10 +215,15 @@ function updateMonitorState() {
 
 function handleClear(slot) {
     const addr = `/slot${slot.id}`;
+    const idx = slot.id - 1;
     console.log(`[Slot ${slot.id}] CLEARED (Hold 1s)`);
     client.send(addr, 'rec', 0);
     client.send(addr, 'play', 0);
     slot.state = 0;
+
+    // Reset crop state
+    cropState[idx].originalLength = 0;
+    cropState[idx].cropOffset = 0;
 
     // Flash LED 3 times to indicate clear
     flashLED(slot, 3, 100);
@@ -192,15 +232,20 @@ function handleClear(slot) {
 
 function handleTap(slot) {
     const addr = `/slot${slot.id}`;
+    const idx = slot.id - 1;
 
     if (slot.state === 0) {
         console.log(`[Slot ${slot.id}] Rec Start`);
+        cropState[idx].recordStartTime = Date.now();
+        cropState[idx].cropOffset = 0;
         client.send(addr, 'rec', 1);
         slot.state = 1;
         setLED(slot, true);
     }
     else if (slot.state === 1) {
-        console.log(`[Slot ${slot.id}] Rec Stop -> Play`);
+        const recordedMs = Date.now() - cropState[idx].recordStartTime;
+        cropState[idx].originalLength = recordedMs;
+        console.log(`[Slot ${slot.id}] Rec Stop -> Play | loop: ${recordedMs}ms`);
         client.send(addr, 'rec', 0);
         client.send(addr, 'play', 1);
         slot.state = 2;
@@ -227,7 +272,8 @@ console.log('');
 console.log('Controls:');
 console.log('  TAP: Record -> Play -> Stop -> Resume');
 console.log('  HOLD 1s: Clear slot (triggers automatically, no release needed)');
-console.log('  ENCODER: Adjust loop length ± (CW=extend, CCW=shorten)');
+console.log('  ENCODER ROTATE: Adjust loop length ± (CW=extend, CCW=shorten)');
+console.log('  ENCODER PRESS: Reset loop to original length');
 console.log('  MONITOR: Toggle passthrough (auto-mutes when any loop plays)');
 console.log('  LED: ON when recording/playing/monitoring, OFF when stopped/empty');
 console.log('');
