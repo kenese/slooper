@@ -182,5 +182,38 @@ test('crop bounds test - cannot go below 100ms', async () => {
     await sendOSC('/slot1', 'play', 0);
 });
 
+test('crop adjustments accumulate correctly', async () => {
+    // Record a 1 second loop
+    await sendOSC('/slot1', 'rec', 1);
+    await new Promise(r => setTimeout(r, 1000));
+    await sendOSC('/slot1', 'rec', 0);
+    await sendOSC('/slot1', 'play', 1);
+
+    // Send multiple crop adjustments
+    await sendOSC('/slot1', 'crop', 50);   // +50ms
+    await sendOSC('/slot1', 'crop', 50);   // +100ms total
+    await sendOSC('/slot1', 'crop', 50);   // +150ms total
+    await sendOSC('/slot1', 'crop', -100); // +50ms total
+
+    // Visual verification: PENDING_LENGTH should show ~1050ms
+    await new Promise(r => setTimeout(r, 500));
+    await sendOSC('/slot1', 'play', 0);
+});
+
+test('crop during playback does not crash', async () => {
+    await sendOSC('/slot1', 'rec', 1);
+    await new Promise(r => setTimeout(r, 500));
+    await sendOSC('/slot1', 'rec', 0);
+    await sendOSC('/slot1', 'play', 1);
+
+    // Rapid crop adjustments during playback
+    for (let i = 0; i < 20; i++) {
+        await sendOSC('/slot1', 'crop', i % 2 === 0 ? 50 : -50);
+    }
+
+    await sendOSC('/slot1', 'play', 0);
+    // If we get here without errors, test passes
+});
+
 // Run
 runTests();
