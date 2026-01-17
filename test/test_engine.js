@@ -215,5 +215,14 @@ test('crop during playback does not crash', async () => {
     // If we get here without errors, test passes
 });
 
+// --- Monitoring Tests ---
+
+test('can send monitor on/off commands', async () => {
+    await sendOSC('/monitor', 1);  // Enable monitoring
+    await new Promise(r => setTimeout(r, 100));
+    await sendOSC('/monitor', 0);  // Disable monitoring
+    // Visual verification: check Pd console for MONITOR output
+});
+
 // Run
 runTests();

@@ -8,12 +8,15 @@ const CONFIG = {
     midiName: 'TRAKTOR X1 MK3',
     // midiName: 'XONE'
     slot1: { note: 10, channel: 0, encoderCC: 20 },  // UPDATE encoderCC after running midi_logger
+    slot2: { note: 10, channel: 1, encoderCC: 21 },  // UPDATE encoderCC after running midi_logger
     // slot1: { note: 14, channel: 15, encoderCC: 8 },  // UPDATE encoderCC after running midi_logger
-    slot2: { note: 15, channel: 15, encoderCC: 8 },  // UPDATE encoderCC after running midi_logger
+    // slot2: { note: 15, channel: 15, encoderCC: 8 },  // UPDATE encoderCC after running midi_logger
     holdThresholdMs: 1000,
     ledVelocityOn: 127,
     ledVelocityOff: 0,
-    cropStepMs: 50  // Milliseconds per encoder tick
+    cropStepMs: 50,  // Milliseconds per encoder tick
+    monitor1: { note: 11, channel: 0 },
+    monitor2: { note: 11, channel: 1 }
 };
 
 // --- SETUP ---
@@ -34,6 +37,13 @@ const output = new easymidi.Output(deviceName);
 let slots = [
     { id: 1, state: 0, note: CONFIG.slot1.note, channel: CONFIG.slot1.channel, holdTimer: null, actionFired: false },
     { id: 2, state: 0, note: CONFIG.slot2.note, channel: CONFIG.slot2.channel, holdTimer: null, actionFired: false }
+];
+
+// Monitoring state
+let monitorEnabled = [false, false];  // per slot
+let monitors = [
+    { id: 1, note: CONFIG.monitor1.note, channel: CONFIG.monitor1.channel },
+    { id: 2, note: CONFIG.monitor2.note, channel: CONFIG.monitor2.channel }
 ];
 
 // --- LED CONTROL ---
@@ -61,12 +71,20 @@ function flashLED(slot, times, intervalMs) {
 
 // Initialize LEDs to off on startup
 slots.forEach(slot => setLED(slot, false));
+monitors.forEach(mon => setLED(mon, false));
 
 // --- LOGIC ---
 
 // Handle button press (noteon with velocity > 0)
 input.on('noteon', (msg) => {
-    let slot = slots.find(s => s.note === msg.note);
+    // Check if it's a monitor button
+    let monitor = monitors.find(m => m.note === msg.note && m.channel === msg.channel);
+    if (monitor && msg.velocity > 0) {
+        handleMonitorToggle(monitor);
+        return;
+    }
+
+    let slot = slots.find(s => s.note === msg.note && s.channel === msg.channel);
     if (!slot) return;
 
     if (msg.velocity === 0) {
@@ -94,7 +112,7 @@ input.on('noteon', (msg) => {
 
 // Handle button release (noteoff)
 input.on('noteoff', (msg) => {
-    let slot = slots.find(s => s.note === msg.note);
+    let slot = slots.find(s => s.note === msg.note && s.channel === msg.channel);
     if (!slot) return;
     handleRelease(slot);
 });
@@ -144,6 +162,22 @@ function handleEncoder(slot, value) {
     }
 }
 
+function handleMonitorToggle(monitor) {
+    const idx = monitor.id - 1;
+    monitorEnabled[idx] = !monitorEnabled[idx];
+    console.log(`[Monitor ${monitor.id}] ${monitorEnabled[idx] ? 'ON' : 'OFF'}`);
+    setLED(monitor, monitorEnabled[idx]);
+    updateMonitorState();
+}
+
+function updateMonitorState() {
+    // Monitoring is active if: (any monitor enabled) AND (no slot is playing)
+    const anyMonitorOn = monitorEnabled[0] || monitorEnabled[1];
+    const anyPlaying = slots.some(s => s.state === 2);
+    const shouldMonitor = anyMonitorOn && !anyPlaying;
+    client.send('/monitor', shouldMonitor ? 1 : 0);
+}
+
 function handleClear(slot) {
     const addr = `/slot${slot.id}`;
     console.log(`[Slot ${slot.id}] CLEARED (Hold 1s)`);
@@ -153,6 +187,7 @@ function handleClear(slot) {
 
     // Flash LED 3 times to indicate clear
     flashLED(slot, 3, 100);
+    updateMonitorState();  // Re-evaluate monitoring
 }
 
 function handleTap(slot) {
@@ -170,18 +205,21 @@ function handleTap(slot) {
         client.send(addr, 'play', 1);
         slot.state = 2;
         setLED(slot, true);
+        updateMonitorState();  // Mute monitoring when playing starts
     }
     else if (slot.state === 2) {
         console.log(`[Slot ${slot.id}] Stopped`);
         client.send(addr, 'play', 0);
         slot.state = 3;
         setLED(slot, false);
+        updateMonitorState();  // Re-evaluate monitoring when stopped
     }
     else if (slot.state === 3) {
         console.log(`[Slot ${slot.id}] Resuming`);
         client.send(addr, 'play', 1);
         slot.state = 2;
         setLED(slot, true);
+        updateMonitorState();  // Mute monitoring when playing resumes
     }
 }
 
@@ -190,5 +228,6 @@ console.log('Controls:');
 console.log('  TAP: Record -> Play -> Stop -> Resume');
 console.log('  HOLD 1s: Clear slot (triggers automatically, no release needed)');
 console.log('  ENCODER: Adjust loop length ± (CW=extend, CCW=shorten)');
-console.log('  LED: ON when recording/playing, OFF when stopped/empty');
+console.log('  MONITOR: Toggle passthrough (auto-mutes when any loop plays)');
+console.log('  LED: ON when recording/playing/monitoring, OFF when stopped/empty');
 console.log('');
