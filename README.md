@@ -75,3 +75,9 @@ You can customize the hardware setup using command-line arguments:
 ```bash
 ./start.sh midi-device=X1MK3 audio-device=Z1
 ```
+
+## TODO
+
+- [ ] Fix adjust/crop reset
+- [ ] Pre-record/delay so the loop start can also be adjusted
+- [ ] Visual feedback of loop position in PD
