@@ -77,6 +77,15 @@ echo "🎛️  Opening Pure Data..."
 if [[ "$OSTYPE" == "darwin"* ]]; then
     open src/engine.pd
 else
+    # Linux: Start JACK if not running
+    if ! pgrep -x jackd > /dev/null && ! pgrep -x jackdbus > /dev/null; then
+        echo "🔊 Starting JACK audio server..."
+        jackd -d alsa -d hw:0 -r 48000 -p 256 -n 3 &
+        sleep 2
+    else
+        echo "✅ JACK already running"
+    fi
+    
     # Linux/Patchbox: Run with JACK support, disable Pd MIDI to let Node.js use it
     pd -nogui -jack -nomidi src/engine.pd &
     

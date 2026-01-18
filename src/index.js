@@ -45,17 +45,32 @@ const midiDeviceName = midiArg ? midiArg.split('=')[1] : 'XONE';
 const midi = CONFIG.midi[midiDeviceName] || CONFIG.midi.XONE;
 console.log(`MIDI Config: ${midi.midiName} (requested: ${midiDeviceName})`);
 
-const deviceName = inputs.find(n => n.toLowerCase().includes(midi.midiName.toLowerCase()));
+const inputDeviceName = inputs.find(n => n.toLowerCase().includes(midi.midiName.toLowerCase()));
 
-if (!deviceName) {
-    console.error(`❌ Device matching "${midi.midiName}" not found.`);
-    console.error(`Available devices: `, inputs);
+if (!inputDeviceName) {
+    console.error(`❌ MIDI Input device matching "${midi.midiName}" not found.`);
+    console.error(`Available inputs: `, inputs);
     process.exit(1);
 }
 
-console.log(`✅ Connected to ${deviceName}`);
-const input = new easymidi.Input(deviceName);
-const output = new easymidi.Output(deviceName);
+console.log(`✅ Connected to ${inputDeviceName}`);
+const input = new easymidi.Input(inputDeviceName);
+
+// On Linux, output ports may have different names - search separately
+const outputs = easymidi.getOutputs();
+const outputDeviceName = outputs.find(n => n.toLowerCase().includes(midi.midiName.toLowerCase()));
+
+let output = null;
+if (outputDeviceName) {
+    try {
+        output = new easymidi.Output(outputDeviceName);
+        console.log(`✅ LED Output: ${outputDeviceName}`);
+    } catch (err) {
+        console.warn(`⚠️  Could not open MIDI output (LEDs disabled): ${err.message}`);
+    }
+} else {
+    console.warn(`⚠️  MIDI Output device not found (LEDs disabled). Available: `, outputs);
+}
 
 // State: 0=EMPTY, 1=RECORDING, 2=PLAYING, 3=STOPPED
 let slots = [
@@ -79,6 +94,7 @@ let cropState = [
 
 // --- LED CONTROL ---
 function setLED(slot, on) {
+    if (!output) return;  // Skip if no MIDI output available
     output.send('noteon', {
         note: slot.note,
         velocity: on ? CONFIG.ledVelocityOn : CONFIG.ledVelocityOff,
