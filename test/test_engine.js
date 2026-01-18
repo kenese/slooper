@@ -442,7 +442,7 @@ test('crop updates PENDING_LENGTH immediately (regression fix)', async () => {
     assert.ok(Math.abs(newLen - (baseLen - 50)) < 5, `Expected ${baseLen - 50}, got ${newLen}`);
 });
 
-test('Crop does not persist across new recording (bug reproduction)', async () => {
+test('Regression: Crop reset on new recording', async () => {
     // 1. Record Loop A
     await sendOSC('/slot1', 'rec', 1);
     await new Promise(r => setTimeout(r, 200));
