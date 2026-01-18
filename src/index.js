@@ -27,10 +27,10 @@ const CONFIG = {
             encoderPress2: { note: 21, channel: 0 },
         },
     },
-    holdThresholdMs: 1000,
+    holdThresholdMs: 500,
     ledVelocityOn: 127,
     ledVelocityOff: 0,
-    cropStepMs: 50,  // Milliseconds per encoder tick
+    cropStepMs: 30,  // Milliseconds per encoder tick
 };
 
 // --- SETUP ---
