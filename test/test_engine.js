@@ -45,7 +45,14 @@ async function runTests() {
     console.log('⚠️  Make sure Pure Data is running with engine.pd loaded!\n');
 
     // Wait a moment for the OSC server to start
+    await new Promise(r => setTimeout(r, 500));
+
+    // Send connect message multiple times to ensure Pd netsend finds us
+    console.log('🔌 Sending /connect to Pd...');
+    await sendOSC('/connect', 1);
     await new Promise(r => setTimeout(r, 200));
+    await sendOSC('/connect', 1);
+    await new Promise(r => setTimeout(r, 500));
 
     for (const t of tests) {
         try {
