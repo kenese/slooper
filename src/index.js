@@ -5,20 +5,26 @@ const { Client } = require('node-osc');
 const CONFIG = {
     oscIp: '127.0.0.1',
     oscPort: 9000,
-    midiName: 'TRAKTOR X1 MK3',
-    // midiName: 'XONE'
-    slot1: { note: 10, channel: 0, encoderCC: 20 },  // UPDATE encoderCC after running midi_logger
-    slot2: { note: 10, channel: 1, encoderCC: 21 },  // UPDATE encoderCC after running midi_logger
-    // slot1: { note: 14, channel: 15, encoderCC: 8 },  // UPDATE encoderCC after running midi_logger
-    // slot2: { note: 15, channel: 15, encoderCC: 8 },  // UPDATE encoderCC after running midi_logger
+    // midiName: 'TRAKTOR X1 MK3',
+    // slot1: { note: 10, channel: 0, encoderCC: 20 },  // UPDATE encoderCC after running midi_logger
+    // slot2: { note: 10, channel: 1, encoderCC: 21 },  // UPDATE encoderCC after running midi_logger
+    // monitor1: { note: 11, channel: 0 },
+    // monitor2: { note: 11, channel: 1 },
+    // encoderPress1: { note: 20, channel: 0 },
+    // encoderPress2: { note: 21, channel: 0 },
+
+    midiName: 'XONE',
+    slot1: { note: 14, channel: 15, encoderCC: 7 },
+    slot2: { note: 15, channel: 15, encoderCC: 7 },
+    monitor1: { note: 15, channel: 15 },
+    monitor2: { note: 10, channel: 15 },
+    encoderPress1: { note: 28, channel: 0 },
+    encoderPress2: { note: 38, channel: 0 },
+
     holdThresholdMs: 1000,
     ledVelocityOn: 127,
     ledVelocityOff: 0,
     cropStepMs: 50,  // Milliseconds per encoder tick
-    monitor1: { note: 11, channel: 0 },
-    monitor2: { note: 11, channel: 1 },
-    encoderPress1: { note: 20, channel: 0 },
-    encoderPress2: { note: 21, channel: 0 }
 };
 
 // --- SETUP ---
