@@ -42,8 +42,6 @@ const args = process.argv.slice(2);
 const midiArg = args.find(arg => arg.startsWith('midi-device='));
 const midiDeviceName = midiArg ? midiArg.split('=')[1] : 'XONE';
 
-
-
 const midi = CONFIG.midi[midiDeviceName] || CONFIG.midi.XONE;
 console.log(`MIDI Config: ${midi.midiName} (requested: ${midiDeviceName})`);
 
@@ -51,6 +49,7 @@ const deviceName = inputs.find(n => n.toLowerCase().includes(midi.midiName.toLow
 
 if (!deviceName) {
     console.error(`❌ Device matching "${midi.midiName}" not found.`);
+    console.error(`Available devices: `, inputs);
     process.exit(1);
 }
 
@@ -324,13 +323,13 @@ function handleTap(slot) {
 }
 
 console.log('');
-console.log('Controls:');
-console.log('  TAP: Record -> Play -> Stop -> Resume');
-console.log('  HOLD 1s: Clear slot (triggers automatically, no release needed)');
-console.log('  ENCODER ROTATE: Adjust loop length ± (CW=extend, CCW=shorten)');
-console.log('  ENCODER PRESS: Reset loop to original length');
-console.log('  MONITOR: Toggle passthrough (auto-mutes when any loop plays)');
-console.log('  LED: ON when recording/playing/monitoring, OFF when stopped/empty');
+console.log('Controls (Runtime MIDI Values):');
+console.log(`  TAP           : [S1: Ch${midi.slot1.channel} N${midi.slot1.note}] [S2: Ch${midi.slot2.channel} N${midi.slot2.note}] -> Record/Play/Stop`);
+console.log(`  HOLD (1s)     : [S1: Ch${midi.slot1.channel} N${midi.slot1.note}] [S2: Ch${midi.slot2.channel} N${midi.slot2.note}] -> Clear Slot`);
+console.log(`  ENCODER ROTATE: [S1: Ch${midi.slot1.channel} CC${midi.slot1.encoderCC}] [S2: Ch${midi.slot2.channel} CC${midi.slot2.encoderCC}] -> Adjust Length`);
+console.log(`  ENCODER PRESS : [S1: Ch${midi.encoderPress1.channel} N${midi.encoderPress1.note}] [S2: Ch${midi.encoderPress2.channel} N${midi.encoderPress2.note}] -> Reset Length`);
+console.log(`  MONITOR       : [S1: Ch${midi.monitor1.channel} N${midi.monitor1.note}] [S2: Ch${midi.monitor2.channel} N${midi.monitor2.note}] -> Toggle Mute`);
+console.log(`  LED           : [S1: Ch${midi.slot1.channel} N${midi.slot1.note}] [S2: Ch${midi.slot2.channel} N${midi.slot2.note}] -> Visual Feedback`);
 console.log('');
 
 // --- ERROR HANDLING ---

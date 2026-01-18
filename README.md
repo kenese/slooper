@@ -41,6 +41,43 @@ Currently hardcoded to support the following but should work with any usb midi d
    npm install
    ```
 
+### Raspberry Pi / Patchbox OS
+
+If you are running this on a Raspberry Pi using Patchbox OS, you will need to install the ALSA development library for the MIDI integration to work.
+
+1. **Install Dependencies**:
+   ```bash
+   sudo apt-get install libasound2-dev
+   ```
+   *Note: Ensure you are running Node.js v14.14+ (older versions don't support `node:` imports used by dependencies).*
+   ```bash
+   ```bash
+   node -v 
+   # If older than v14.14, you MUST upgrade.
+   # We recommend Node.js v18 LTS as it has the best compatibility with Raspberry Pi (ARMv7/ARM64) and Patchbox OS.
+   
+   # 1. Remove old version (optional but recommended)
+   sudo apt remove nodejs npm
+   
+   # 2. Install Node.js v18 LTS
+   curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+   sudo apt-get install -y nodejs
+   ```
+2. **Transfer Files**:
+   Use `rsync` to copy the project to your Pi. This excludes large/incompatible folders like `.git` and `node_modules` (which must be rebuilt on the Pi).
+   ```bash
+   rsync -avz --exclude '.git' --exclude 'node_modules' ./slooper patch@patchbox.local:/home/patch/
+   ```
+3. **Install & Run**:
+   SSH into your Pi, navigate to the directory, install dependencies, and run the script.
+   ```bash
+   cd slooper
+   npm install
+   ./start.sh
+   ```
+4. **Audio Setup**:
+   Ensure your audio interface is configured correctly in Patchbox OS (using `patchbox` config tool or JACK). The startup script attempts to launch `pd`, but you may need to manually manage connections if using JACK.
+
 ### Running
 
 Start the application using the provided shell script. This will automatically configure audio settings, start Pure Data, and launch the Node.js controller.
@@ -75,6 +112,25 @@ You can customize the hardware setup using command-line arguments:
 ```bash
 ./start.sh midi-device=X1MK3 audio-device=Z1
 ```
+
+### Troubleshooting (Raspberry Pi)
+
+**"jack wont start" / D-Bus Error**:
+If you see errors about `dbus-daemon` or `jack_control` when running headless (SSH), you need to start a D-Bus session manually before starting JACK or the script.
+
+Run this:
+```bash
+export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
+# If that doesn't work, try:
+dbus-launch jack_control start
+```
+
+**"Device matching 'XONE' not found"**:
+This means the Raspberry Pi does not see your USB MIDI controller.
+1. Check that the USB cable is connected and the device is powered on.
+2. Run `lsusb` to see if the device acts up in the USB list.
+3. Run `aconnect -l` to see available ALSA MIDI ports.
+4. If you are using a different controller, update the `start.sh` command (e.g., `midi-device=X1MK3`) or modify `src/index.js` to match your device's name.
 
 ## TODO
 
