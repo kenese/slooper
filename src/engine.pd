@@ -42,7 +42,7 @@
 #X obj 400 160 +;
 #X obj 400 190 clip 100 30000;
 #X obj 520 190 print PENDING_LENGTH;
-#X obj 400 100 t f b;
+#X obj 400 100 t b f;
 #X obj 400 220 f;
 #X obj 381 600 threshold~ 0.99 10 0.01 10;
 #X obj 500 460 f;
@@ -90,8 +90,8 @@
 #X connect 15 0 17 0;
 #X connect 16 0 22 0;
 #X connect 22 0 39 1;
-#X connect 43 0 40 1;
-#X connect 43 1 39 0;
+#X connect 43 1 40 1;
+#X connect 43 0 39 0;
 #X connect 39 0 40 0;
 #X connect 40 0 41 0;
 #X connect 41 0 39 1;

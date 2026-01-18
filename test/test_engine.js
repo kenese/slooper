@@ -411,5 +411,36 @@ test('Crop Extension Logic: Record -> Stop -> Play -> Crop (+) -> Verify Length 
     await sendOSC('/slot1', 'play', 0);
 });
 
+test('crop updates PENDING_LENGTH immediately (regression fix)', async () => {
+    // 1. Record a base loop
+    await sendOSC('/slot1', 'rec', 1);
+    await new Promise(r => setTimeout(r, 400));
+    await sendOSC('/slot1', 'rec', 0);
+
+    // Wait for initial length to settle
+    await new Promise(r => setTimeout(r, 200));
+    stateMessages = [];
+
+    // Get current length
+    await sendOSC('/slot1', 'play', 0); // Force a status update or just wait
+    // Actually we can just query state or wait for "stopped" which sends length
+    await expectState('slot1', 'length');
+    const lenMsg = stateMessages.find(m => m[0] === 'slot1' && m[1] === 'length');
+    const baseLen = lenMsg[2];
+
+    // 2. Clear messages and send ONE crop command
+    stateMessages = [];
+    await sendOSC('/slot1', 'crop', -50);
+
+    // 3. Verify the VERY NEXT length message has the change
+    const newLenMsg = await expectState('slot1', 'length');
+    const newLen = newLenMsg[2];
+
+    console.log(`Base: ${baseLen}, Expected: ${baseLen - 50}, Got: ${newLen}`);
+
+    // Allow small jitter (±1ms) but generally it should be exact math in PD if just float ops
+    assert.ok(Math.abs(newLen - (baseLen - 50)) < 5, `Expected ${baseLen - 50}, got ${newLen}`);
+});
+
 // Run
 runTests();
