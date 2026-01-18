@@ -109,7 +109,6 @@
 #X connect 30 0 24 1;
 #X connect 31 0 20 0;
 #X connect 32 0 6 0;
-#X connect 32 0 6 1;
 #X connect 33 0 34 0;
 #X connect 34 0 35 0;
 #X connect 35 0 36 0;
@@ -158,3 +157,20 @@
 #X connect 68 0 69 0;
 #X connect 69 0 6 1;
 #X connect 3 2 68 1;
+#X obj 369 128 array define slot1_data_R 960000;
+#X obj 187 515 tabwrite~ slot1_data_R;
+#X obj 415 630 tabread4~ slot1_data_R;
+#X obj 330 640 *~;
+#X obj 115 620 *~ 0;
+#X obj 115 660 *~ 1;
+#X obj 224 450 *~ 1;
+#X connect 67 0 76 0;
+#X connect 76 0 71 0;
+#X connect 12 0 71 0;
+#X connect 25 0 72 0;
+#X connect 72 0 73 0;
+#X connect 64 0 73 1;
+#X connect 73 0 74 0;
+#X connect 7 1 74 1;
+#X connect 74 0 75 0;
+#X connect 75 0 6 1;
