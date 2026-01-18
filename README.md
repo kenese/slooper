@@ -1,6 +1,6 @@
 # slooper
 
-A DIY hardware looper built using Node.js and Pure Data (Pd). This is a vibe coded fuck around so bear that in mind before relying too much on any of it. AI also wrote most of this page so it is pretty dorky. I just corrected some errors
+A DIY raspberry pi looper built using Node.js and Pure Data (Pd). This is a vibe coded fuck around so bear that in mind before relying too much on any of it. AI also wrote most of this page so it is pretty dorky. I just corrected some errors
 
 ## Features
 
