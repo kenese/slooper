@@ -30,8 +30,8 @@
 #X obj 200 341 print ---REC_STOP---;
 #X obj 250 200 sel 1;
 #X msg 250 230 0;
-#X obj 224 450 *~ 0.7;
-#X obj 85 660 *~ 0.7;
+#X obj 224 450 *~ 1;
+#X obj 85 660 *~ 1;
 #X obj 700 163 loadbang;
 #X obj 700 193 samplerate~;
 #X obj 700 223 / 1000;
@@ -48,7 +48,7 @@
 #X obj 500 460 f;
 #X obj 600 460 print ACTIVE_LENGTH;
 #X obj 550 700 *~ 0;
-#X obj 550 730 *~ 0.7;
+#X obj 550 730 *~ 1;
 #X obj 550 680 print MONITOR;
 #X obj 800 50 netsend -u -b;
 #X obj 800 20 loadbang;
@@ -66,8 +66,6 @@
 #X connect 3 0 7 0;
 #X connect 3 2 48 1;
 #X connect 3 2 50 0;
-#X connect 5 0 31 0;
-#X connect 5 0 48 0;
 #X connect 7 0 9 0;
 #X connect 7 1 26 1;
 #X connect 7 1 8 0;
@@ -149,3 +147,7 @@
 #X connect 21 0 65 0;
 #X connect 64 0 65 1;
 #X connect 65 0 26 0;
+#X obj 224 430 *~ 0.8;
+#X connect 5 0 66 0;
+#X connect 66 0 31 0;
+#X connect 66 0 48 0;
