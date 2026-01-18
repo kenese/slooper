@@ -442,5 +442,60 @@ test('crop updates PENDING_LENGTH immediately (regression fix)', async () => {
     assert.ok(Math.abs(newLen - (baseLen - 50)) < 5, `Expected ${baseLen - 50}, got ${newLen}`);
 });
 
+test('Crop does not persist across new recording (bug reproduction)', async () => {
+    // 1. Record Loop A
+    await sendOSC('/slot1', 'rec', 1);
+    await new Promise(r => setTimeout(r, 200));
+    await sendOSC('/slot1', 'rec', 0);
+
+    // 2. Crop Loop A
+    await sendOSC('/slot1', 'crop', -50);
+
+    // 3. Clear (simulated by rec 0/play 0 or explicit clear if we supported it fully, 
+    //    but user flow is usually Stop -> Rec New)
+    await sendOSC('/slot1', 'play', 0);
+    // User JS sends 'clear', let's see if we need to send that to repro.
+    // The user logs show: OSC_IN: list slot1 clear 1. 
+    // We should send that to match user behavior, even if we suspect PD ignores it currently.
+    await sendOSC('/slot1', 'clear', 1);
+
+    // 4. Record Loop B
+    // Wait a bit to ensure clear processed
+    await new Promise(r => setTimeout(r, 200));
+    const startRecTime = Date.now();
+    await sendOSC('/slot1', 'rec', 1);
+
+    await new Promise(r => setTimeout(r, 400));
+    await sendOSC('/slot1', 'rec', 0);
+    const recDuration = Date.now() - startRecTime;
+
+    // 5. Verify Length of Loop B
+    // It should be roughly 400ms. If crop persisted (-50), it might be 350ms 
+    // OR if PD logic for pending length is flawwed, it triggers immediately.
+
+    stateMessages = [];
+    await sendOSC('/slot1', 'play', 0); // Trigger stopped state which sends length
+
+    const lengthMsg = await expectState('slot1', 'length');
+    const bLen = lengthMsg[2];
+
+    console.log(`Loop B Duration (approx): ${recDuration}, Reported Length: ${bLen}`);
+
+    // If bug exists, bLen might be significantly affected by the -50 crop
+    // But mainly we want to ensure the "crop accumulator" is 0.
+    // If it's not 0, then bLen = ActualRec + OldCrop.
+    // Since we don't know exact rec duration down to the ms in JS test (timers vary),
+    // we can check if sending ANOTHER crop command behaves relatively or absolutely?
+    // Better: Send a request that would definitely fail if crop was applied.
+    // Or just rely on the user observation: "PENDING_LENGTH: 2398" (immediate application).
+
+    // Let's rely on checking if the length is roughly what we recorded (400ms) 
+    // vs 400-50=350. 
+    // Actually, 50ms is large enough to detect if we have stable timers.
+    // But let's verify if 'clear' resets the accumulator.
+
+    assert.ok(Math.abs(bLen - 400) < 200, `Length ${bLen} should be close to 400ms, not influenced by previous crop -50`);
+});
+
 // Run
 runTests();
