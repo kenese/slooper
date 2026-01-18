@@ -217,6 +217,10 @@ function handleClear(slot) {
     const addr = `/slot${slot.id}`;
     const idx = slot.id - 1;
     console.log(`[Slot ${slot.id}] CLEARED (Hold 1s)`);
+
+    // Explicitly stop playback first
+    client.send(addr, 'play', 0);
+
     client.send(addr, 'clear', 1);
     slot.state = 0;
 

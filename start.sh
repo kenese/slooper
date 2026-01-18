@@ -5,11 +5,25 @@
 
 cd "$(dirname "$0")"
 
+
+# Define cleanup function
+cleanup() {
+    echo ""
+    echo "🛑 Shutting down..."
+    # Force kill any Pd instances
+    killall "Pd-0.55-2" 2>/dev/null
+    killall Pd 2>/dev/null
+    killall pd 2>/dev/null
+    pkill -9 "Pd" 2>/dev/null
+    pkill -9 "pd" 2>/dev/null
+}
+
+# Trap EXIT signal (happens on ctrl+c or normal exit) to run cleanup
+trap cleanup EXIT
+
 echo "🔄 Stopping any running instances..."
 pkill -f "node src/index.js" 2>/dev/null
-osascript -e 'tell application "Pd-0.55-2" to quit' 2>/dev/null || \
-osascript -e 'tell application "Pd" to quit' 2>/dev/null || \
-pkill -9 pd 2>/dev/null
+cleanup
 
 sleep 1
 
