@@ -27,10 +27,36 @@ cleanup
 
 sleep 1
 
+# Parse arguments for local use
+AUDIO_DEVICE="XONE"
+for arg in "$@"
+do
+    case $arg in
+        audio-device=*)
+        AUDIO_DEVICE="${arg#*=}"
+        ;;
+    esac
+done
+
+echo "🎛️  Configuring Audio for: $AUDIO_DEVICE"
+
+if [ "$AUDIO_DEVICE" == "Z1" ]; then
+    # Z1: adc 1 2, dac 3 4
+    sed -i '' 's/adc~ [0-9]* [0-9]*/adc~ 1 2/' src/engine.pd
+    sed -i '' 's/dac~ [0-9]* [0-9]*/dac~ 3 4/' src/engine.pd
+elif [ "$AUDIO_DEVICE" == "XONE" ]; then
+    # XONE: adc 9 10, dac 1 2
+    sed -i '' 's/adc~ [0-9]* [0-9]*/adc~ 9 10/' src/engine.pd
+    sed -i '' 's/dac~ [0-9]* [0-9]*/dac~ 1 2/' src/engine.pd
+else
+    echo "⚠️ Unknown audio device: $AUDIO_DEVICE. Using current settings."
+fi
+
+
 echo "🎛️  Opening Pure Data..."
 open src/engine.pd
 
 sleep 3
 
 echo "🚀 Starting Node controller..."
-node src/index.js
+node src/index.js "$@"

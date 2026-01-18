@@ -5,22 +5,28 @@ const { Client } = require('node-osc');
 const CONFIG = {
     oscIp: '127.0.0.1',
     oscPort: 9000,
-    // midiName: 'TRAKTOR X1 MK3',
-    // slot1: { note: 10, channel: 0, encoderCC: 20 },  // UPDATE encoderCC after running midi_logger
-    // slot2: { note: 10, channel: 1, encoderCC: 21 },  // UPDATE encoderCC after running midi_logger
-    // monitor1: { note: 11, channel: 0 },
-    // monitor2: { note: 11, channel: 1 },
-    // encoderPress1: { note: 20, channel: 0 },
-    // encoderPress2: { note: 21, channel: 0 },
+    throttleMs: 50, // Minimum time between encoder updates
 
-    midiName: 'XONE',
-    slot1: { note: 14, channel: 15, encoderCC: 7 },
-    slot2: { note: 15, channel: 15, encoderCC: 7 },
-    monitor1: { note: 15, channel: 15 },
-    monitor2: { note: 10, channel: 15 },
-    encoderPress1: { note: 28, channel: 0 },
-    encoderPress2: { note: 38, channel: 0 },
-
+    midi: {
+        XONE: {
+            midiName: 'XONE',
+            slot1: { note: 14, channel: 15, encoderCC: 7 },
+            slot2: { note: 15, channel: 15, encoderCC: 7 },
+            monitor1: { note: 10, channel: 15 },
+            monitor2: { note: 36, channel: 15 },
+            encoderPress1: { note: 28, channel: 15 },
+            encoderPress2: { note: 38, channel: 15 },
+        },
+        X1MK3: {
+            midiName: 'TRAKTOR X1MK3',
+            slot1: { note: 10, channel: 0, encoderCC: 20 },  // UPDATE encoderCC after running midi_logger
+            slot2: { note: 10, channel: 1, encoderCC: 21 },  // UPDATE encoderCC after running midi_logger
+            monitor1: { note: 11, channel: 0 },
+            monitor2: { note: 11, channel: 1 },
+            encoderPress1: { note: 20, channel: 0 },
+            encoderPress2: { note: 21, channel: 0 },
+        },
+    },
     holdThresholdMs: 1000,
     ledVelocityOn: 127,
     ledVelocityOff: 0,
@@ -30,10 +36,21 @@ const CONFIG = {
 // --- SETUP ---
 const client = new Client(CONFIG.oscIp, CONFIG.oscPort);
 const inputs = easymidi.getInputs();
-const deviceName = inputs.find(n => n.toLowerCase().includes(CONFIG.midiName.toLowerCase()));
+
+// Parse command line arguments
+const args = process.argv.slice(2);
+const midiArg = args.find(arg => arg.startsWith('midi-device='));
+const midiDeviceName = midiArg ? midiArg.split('=')[1] : 'XONE';
+
+
+
+const midi = CONFIG.midi[midiDeviceName] || CONFIG.midi.XONE;
+console.log(`MIDI Config: ${midi.midiName} (requested: ${midiDeviceName})`);
+
+const deviceName = inputs.find(n => n.toLowerCase().includes(midi.midiName.toLowerCase()));
 
 if (!deviceName) {
-    console.error(`❌ Device matching "${CONFIG.midiName}" not found.`);
+    console.error(`❌ Device matching "${midi.midiName}" not found.`);
     process.exit(1);
 }
 
@@ -43,21 +60,22 @@ const output = new easymidi.Output(deviceName);
 
 // State: 0=EMPTY, 1=RECORDING, 2=PLAYING, 3=STOPPED
 let slots = [
-    { id: 1, state: 0, note: CONFIG.slot1.note, channel: CONFIG.slot1.channel, holdTimer: null, actionFired: false },
-    { id: 2, state: 0, note: CONFIG.slot2.note, channel: CONFIG.slot2.channel, holdTimer: null, actionFired: false }
+    { id: 1, state: 0, note: midi.slot1.note, channel: midi.slot1.channel, holdTimer: null, actionFired: false },
+    { id: 2, state: 0, note: midi.slot2.note, channel: midi.slot2.channel, holdTimer: null, actionFired: false }
 ];
 
 // Monitoring state
 let monitorEnabled = [false, false];  // per slot
 let monitors = [
-    { id: 1, note: CONFIG.monitor1.note, channel: CONFIG.monitor1.channel },
-    { id: 2, note: CONFIG.monitor2.note, channel: CONFIG.monitor2.channel }
+    { id: 1, note: midi.monitor1.note, channel: midi.monitor1.channel },
+    { id: 2, note: midi.monitor2.note, channel: midi.monitor2.channel }
 ];
 
 // Crop tracking per slot
+// Crop tracking per slot
 let cropState = [
-    { recordStartTime: 0, originalLength: 0, cropOffset: 0 },
-    { recordStartTime: 0, originalLength: 0, cropOffset: 0 }
+    { recordStartTime: 0, originalLength: 0, cropOffset: 0, pendingDelta: 0, updateTimer: null },
+    { recordStartTime: 0, originalLength: 0, cropOffset: 0, pendingDelta: 0, updateTimer: null }
 ];
 
 // --- LED CONTROL ---
@@ -100,11 +118,11 @@ input.on('noteon', (msg) => {
 
     // Check if it's an encoder press (reset loop length)
     if (msg.velocity > 0) {
-        if (msg.note === CONFIG.encoderPress1.note && msg.channel === CONFIG.encoderPress1.channel) {
+        if (msg.note === midi.encoderPress1.note && msg.channel === midi.encoderPress1.channel) {
             handleEncoderPress(slots[0]);
             return;
         }
-        if (msg.note === CONFIG.encoderPress2.note && msg.channel === CONFIG.encoderPress2.channel) {
+        if (msg.note === midi.encoderPress2.note && msg.channel === midi.encoderPress2.channel) {
             handleEncoderPress(slots[1]);
             return;
         }
@@ -146,9 +164,9 @@ input.on('noteoff', (msg) => {
 // Handle encoder for loop length adjustment
 input.on('cc', (msg) => {
     let slot = null;
-    if (msg.controller === CONFIG.slot1.encoderCC) {
+    if (msg.controller === midi.slot1.encoderCC) {
         slot = slots[0];
-    } else if (msg.controller === CONFIG.slot2.encoderCC) {
+    } else if (msg.controller === midi.slot2.encoderCC) {
         slot = slots[1];
     }
     if (slot) handleEncoder(slot, msg.value);
@@ -182,14 +200,37 @@ function handleEncoder(slot, value) {
     }
 
     if (delta !== 0) {
-        const addr = `/slot${slot.id}`;
         const idx = slot.id - 1;
-        cropState[idx].cropOffset += delta;
-        const currentLength = cropState[idx].originalLength + cropState[idx].cropOffset;
-        const offsetStr = cropState[idx].cropOffset >= 0 ? `+${cropState[idx].cropOffset}` : cropState[idx].cropOffset;
-        console.log(`[Slot ${slot.id}] loop: ${currentLength}ms [crop ${offsetStr}ms]`);
-        client.send(addr, 'crop', delta);
+
+        // Add to pending delta
+        cropState[idx].pendingDelta += delta;
+
+        // If no timer is running, schedule an update
+        if (!cropState[idx].updateTimer) {
+            cropState[idx].updateTimer = setTimeout(() => {
+                processEncoderUpdate(slot);
+            }, CONFIG.throttleMs);
+        }
     }
+}
+
+function processEncoderUpdate(slot) {
+    const idx = slot.id - 1;
+    const delta = cropState[idx].pendingDelta;
+
+    // Reset pending/timer stuff first
+    cropState[idx].pendingDelta = 0;
+    cropState[idx].updateTimer = null;
+
+    if (delta === 0) return;
+
+    const addr = `/slot${slot.id}`;
+    cropState[idx].cropOffset += delta;
+    const currentLength = cropState[idx].originalLength + cropState[idx].cropOffset;
+    const offsetStr = cropState[idx].cropOffset >= 0 ? `+${cropState[idx].cropOffset}` : cropState[idx].cropOffset;
+
+    console.log(`[Slot ${slot.id}] loop: ${currentLength}ms [crop ${offsetStr}ms]`);
+    client.send(addr, 'crop', delta);
 }
 
 function handleEncoderPress(slot) {
@@ -233,6 +274,11 @@ function handleClear(slot) {
     // Reset crop state
     cropState[idx].originalLength = 0;
     cropState[idx].cropOffset = 0;
+    cropState[idx].pendingDelta = 0;
+    if (cropState[idx].updateTimer) {
+        clearTimeout(cropState[idx].updateTimer);
+        cropState[idx].updateTimer = null;
+    }
 
     // Flash LED 3 times to indicate clear
     flashLED(slot, 3, 100);
@@ -286,3 +332,14 @@ console.log('  ENCODER PRESS: Reset loop to original length');
 console.log('  MONITOR: Toggle passthrough (auto-mutes when any loop plays)');
 console.log('  LED: ON when recording/playing/monitoring, OFF when stopped/empty');
 console.log('');
+
+// --- ERROR HANDLING ---
+process.on('uncaughtException', (err) => {
+    console.error('⚠️  Uncaught Exception:', err);
+    // Don't exit immediately, try to keep running if possible, 
+    // but typically Napi::Error means native module trouble.
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('⚠️  Unhandled Rejection at:', promise, 'reason:', reason);
+});

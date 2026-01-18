@@ -4,8 +4,8 @@
 #X obj 101 78 list trim;
 #X obj 100 116 route slot1 slot2 monitor connect;
 #X obj 138 60 print OSC_IN;
-#X obj 224 412 adc~ 1 2;
-#X obj 70 700 dac~ 3 4;
+#X obj 224 412 adc~ 9 10;
+#X obj 70 700 dac~ 1 2;
 #X obj 100 166 route rec play crop;
 #X obj 181 182 print PLAY_CMD;
 #X obj 158 231 sel 1 0;
