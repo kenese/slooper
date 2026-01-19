@@ -80,8 +80,22 @@ else
     # Linux: Start JACK if not running
     if ! pgrep -x jackd > /dev/null && ! pgrep -x jackdbus > /dev/null; then
         echo "🔊 Starting JACK audio server..."
-        jackd -d alsa -d hw:0 -r 48000 -p 256 -n 3 &
-        sleep 2
+        
+        # Auto-detect XONE:PX5 card number
+        XONE_CARD=$(aplay -l 2>/dev/null | grep -i "XONE" | head -1 | sed 's/card \([0-9]*\):.*/\1/')
+        
+        if [ -n "$XONE_CARD" ]; then
+            echo "   Found XONE:PX5 on card $XONE_CARD"
+            JACK_DEVICE="hw:$XONE_CARD"
+        else
+            echo "   ⚠️  XONE not found, trying hw:3 (common USB position)"
+            JACK_DEVICE="hw:3"
+        fi
+        
+        # Start JACK with duplex audio (input AND output)
+        # -P = playback only mode disabled, enables capture too
+        jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 512 -n 3 &
+        sleep 3
     else
         echo "✅ JACK already running"
     fi
