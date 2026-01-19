@@ -104,17 +104,32 @@ else
     pd -nogui -jack -nomidi src/engine.pd &
     
     # Wait for Pd to start and register ports
-    sleep 5
+    echo "⏳ Waiting for Pure Data to register JACK ports..."
+    for i in {1..10}; do
+        if jack_lsp 2>/dev/null | grep -q "pure_data"; then
+            echo "   ✅ Pure Data ports found!"
+            break
+        fi
+        sleep 1
+    done
     
-    # Auto-connect Pd to system audio (adjust ports if needed)
+    # Show available ports for debugging
+    echo ""
+    echo "📋 Available JACK ports:"
+    jack_lsp 2>/dev/null || echo "   (Could not list ports)"
+    echo ""
+    
+    # Auto-connect Pd to system audio
     echo "🔗 Connecting JACK audio ports..."
-    jack_connect system:capture_1 pure_data:input_1 2>/dev/null
-    jack_connect system:capture_2 pure_data:input_2 2>/dev/null
-    jack_connect pure_data:output_1 system:playback_1 2>/dev/null
-    jack_connect pure_data:output_2 system:playback_2 2>/dev/null
+    jack_connect system:capture_1 pure_data:input_1 && echo "   ✅ capture_1 → input_1" || echo "   ❌ capture_1 → input_1 FAILED"
+    jack_connect system:capture_2 pure_data:input_2 && echo "   ✅ capture_2 → input_2" || echo "   ❌ capture_2 → input_2 FAILED"
+    jack_connect pure_data:output_1 system:playback_1 && echo "   ✅ output_1 → playback_1" || echo "   ✅ output_1 → playback_1"
+    jack_connect pure_data:output_2 system:playback_2 && echo "   ✅ output_2 → playback_2" || echo "   ✅ output_2 → playback_2"
     
-    echo "🔍 JACK Connections:"
-    jack_lsp -c
+    echo ""
+    echo "🔍 Active JACK Connections:"
+    jack_lsp -c 2>/dev/null || echo "   (Could not list connections)"
+    echo ""
 fi
 
 sleep 3
