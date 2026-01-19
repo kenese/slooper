@@ -120,11 +120,20 @@ else
     echo ""
     
     # Auto-connect Pd to system audio
+    # XONE:PX5 uses channels 9-10 for main stereo input (same as Mac)
+    # Output goes to channels 1-2 (main stereo output)
     echo "🔗 Connecting JACK audio ports..."
-    jack_connect system:capture_1 pure_data:input_1 && echo "   ✅ capture_1 → input_1" || echo "   ❌ capture_1 → input_1 FAILED"
-    jack_connect system:capture_2 pure_data:input_2 && echo "   ✅ capture_2 → input_2" || echo "   ❌ capture_2 → input_2 FAILED"
-    jack_connect pure_data:output_1 system:playback_1 && echo "   ✅ output_1 → playback_1" || echo "   ✅ output_1 → playback_1"
-    jack_connect pure_data:output_2 system:playback_2 && echo "   ✅ output_2 → playback_2" || echo "   ✅ output_2 → playback_2"
+    echo "   (Input: capture_9/10 → Pd, Output: Pd → playback_1/2)"
+    
+    # Disconnect any existing connections first
+    jack_disconnect system:capture_1 pure_data:input_1 2>/dev/null
+    jack_disconnect system:capture_2 pure_data:input_2 2>/dev/null
+    
+    # Connect the correct XONE channels
+    jack_connect system:capture_9 pure_data:input_1 && echo "   ✅ capture_9 → input_1" || echo "   ⚠️ capture_9 → input_1 (may already be connected)"
+    jack_connect system:capture_10 pure_data:input_2 && echo "   ✅ capture_10 → input_2" || echo "   ⚠️ capture_10 → input_2 (may already be connected)"
+    jack_connect pure_data:output_1 system:playback_1 && echo "   ✅ output_1 → playback_1" || echo "   ⚠️ output_1 → playback_1 (may already be connected)"
+    jack_connect pure_data:output_2 system:playback_2 && echo "   ✅ output_2 → playback_2" || echo "   ⚠️ output_2 → playback_2 (may already be connected)"
     
     echo ""
     echo "🔍 Active JACK Connections:"
