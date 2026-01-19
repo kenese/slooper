@@ -147,12 +147,9 @@ function setupMidiHandlers() {
         { id: 2, state: 0, note: midi.slot2.note, channel: midi.slot2.channel, holdTimer: null, actionFired: false }
     ];
 
-    // Monitoring state
-    let monitorEnabled = [false, false];  // per slot
-    let monitors = [
-        { id: 1, note: midi.monitor1.note, channel: midi.monitor1.channel },
-        { id: 2, note: midi.monitor2.note, channel: midi.monitor2.channel }
-    ];
+    // Monitoring state - single monitor (muted when any loop is playing)
+    let monitorEnabled = false;
+    const monitorButton = { note: midi.monitor1.note, channel: midi.monitor1.channel };
 
     // Crop tracking per slot
     // Crop tracking per slot
@@ -187,16 +184,15 @@ function setupMidiHandlers() {
 
     // Initialize LEDs to off on startup
     slots.forEach(slot => setLED(slot, false));
-    monitors.forEach(mon => setLED(mon, false));
+    setLED(monitorButton, false);
 
     // --- LOGIC ---
 
     // Handle button press (noteon with velocity > 0)
     input.on('noteon', (msg) => {
-        // Check if it's a monitor button
-        let monitor = monitors.find(m => m.note === msg.note && m.channel === msg.channel);
-        if (monitor && msg.velocity > 0) {
-            handleMonitorToggle(monitor);
+        // Check if it's the monitor button
+        if (msg.note === monitorButton.note && msg.channel === monitorButton.channel && msg.velocity > 0) {
+            handleMonitorToggle();
             return;
         }
 
@@ -328,19 +324,17 @@ function setupMidiHandlers() {
         client.send(addr, 'reset', 1);
     }
 
-    function handleMonitorToggle(monitor) {
-        const idx = monitor.id - 1;
-        monitorEnabled[idx] = !monitorEnabled[idx];
-        console.log(`[Monitor ${monitor.id}] ${monitorEnabled[idx] ? 'ON' : 'OFF'}`);
-        setLED(monitor, monitorEnabled[idx]);
+    function handleMonitorToggle() {
+        monitorEnabled = !monitorEnabled;
+        console.log(`[Monitor] ${monitorEnabled ? 'ON' : 'OFF'}`);
+        setLED(monitorButton, monitorEnabled);
         updateMonitorState();
     }
 
     function updateMonitorState() {
-        // Monitoring is active if: (any monitor enabled) AND (no slot is playing)
-        const anyMonitorOn = monitorEnabled[0] || monitorEnabled[1];
+        // Monitor is active if: monitor enabled AND no slot is playing
         const anyPlaying = slots.some(s => s.state === 2);
-        const shouldMonitor = anyMonitorOn && !anyPlaying;
+        const shouldMonitor = monitorEnabled && !anyPlaying;
         client.send('/monitor', shouldMonitor ? 1 : 0);
     }
 
@@ -413,7 +407,7 @@ function setupMidiHandlers() {
     console.log(`  HOLD (1s)     : [S1: Ch${midi.slot1.channel} N${midi.slot1.note}] [S2: Ch${midi.slot2.channel} N${midi.slot2.note}] -> Clear Slot`);
     console.log(`  ENCODER ROTATE: [S1: Ch${midi.slot1.channel} CC${midi.slot1.encoderCC}] [S2: Ch${midi.slot2.channel} CC${midi.slot2.encoderCC}] -> Adjust Length`);
     console.log(`  ENCODER PRESS : [S1: Ch${midi.encoderPress1.channel} N${midi.encoderPress1.note}] [S2: Ch${midi.encoderPress2.channel} N${midi.encoderPress2.note}] -> Reset Length`);
-    console.log(`  MONITOR       : [S1: Ch${midi.monitor1.channel} N${midi.monitor1.note}] [S2: Ch${midi.monitor2.channel} N${midi.monitor2.note}] -> Toggle Mute`);
+    console.log(`  MONITOR       : Ch${midi.monitor1.channel} N${midi.monitor1.note} -> Toggle (mutes when loop plays)`);
     console.log(`  LED           : [S1: Ch${midi.slot1.channel} N${midi.slot1.note}] [S2: Ch${midi.slot2.channel} N${midi.slot2.note}] -> Visual Feedback`);
     console.log('');
 
