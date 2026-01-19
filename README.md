@@ -113,6 +113,18 @@ You can customize the hardware setup using command-line arguments:
 ./start.sh midi-device=X1MK3 audio-device=Z1
 ```
 
+**Play Mode (Resume Behavior):**
+
+By default, resuming a paused loop happens on button **release** rather than press. This prevents the loop from playing when you hold to delete.
+
+```bash
+# Default: play on release (prevents playback during hold-to-delete)
+./start.sh
+
+# Instant playback on press (old behavior, lowest latency)
+./start.sh play-on-press
+```
+
 ### Start/Stop Options (Linux/Pi)
 
 **Normal Start** (reuses existing JACK if running):

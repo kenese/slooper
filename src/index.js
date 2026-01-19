@@ -40,8 +40,13 @@ const args = process.argv.slice(2);
 const midiArg = args.find(arg => arg.startsWith('midi-device='));
 const midiDeviceName = midiArg ? midiArg.split('=')[1] : 'XONE';
 
+// Play-on-release: default true. Passing 'play-on-press' restores instant playback.
+// When true, resuming a paused loop waits for button release (avoids playback during hold-to-delete).
+const playOnPress = args.includes('play-on-press');
+
 const midi = CONFIG.midi[midiDeviceName] || CONFIG.midi.XONE;
 console.log(`MIDI Config: ${midi.midiName} (requested: ${midiDeviceName})`);
+console.log(`Play Mode: ${playOnPress ? 'on-press (instant)' : 'on-release (default)'}`);
 
 // Find input port matching our device
 const inputIndex = inputs.findIndex(n => n.toLowerCase().includes(midi.midiName.toLowerCase()));
@@ -223,9 +228,11 @@ function setupMidiHandlers() {
                 slot.holdTimer = null;
             }, CONFIG.holdThresholdMs);
 
-            // For STOPPED state, trigger resume immediately on press for low latency
-            // For PLAYING state, wait for release so hold-to-clear keeps playing
-            if (slot.state === 3) {
+            // For STOPPED state: behavior depends on playOnPress setting
+            // - playOnPress=true: resume immediately for lowest latency
+            // - playOnPress=false (default): wait for release to avoid playback during hold-to-delete
+            // For PLAYING state, always wait for release so hold-to-clear keeps playing
+            if (slot.state === 3 && playOnPress) {
                 handleTap(slot);
                 slot.actionFired = true;
             }

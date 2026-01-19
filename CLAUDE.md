@@ -44,6 +44,8 @@ Pure Data patches use zero-indexed object numbers in the text format. **Connecti
 - MIDI devices configured in `MIDI_CONFIGS` object at top of file
 - Throttled encoder updates (CONFIG.throttleMs = 100)
 - Hold detection for clear function (CONFIG.holdThresholdMs = 500)
+- Play-on-release (default): Resuming a paused loop waits for button release (prevents playback during hold-to-delete)
+- Pass `play-on-press` arg to get instant playback on button press instead
 
 ### Pure Data (engine.pd)
 - Arrays sized for 20 seconds at 48kHz: `960000` samples
