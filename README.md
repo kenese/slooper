@@ -113,6 +113,45 @@ You can customize the hardware setup using command-line arguments:
 ./start.sh midi-device=X1MK3 audio-device=Z1
 ```
 
+### Start/Stop Options (Linux/Pi)
+
+**Normal Start** (reuses existing JACK if running):
+```bash
+./start.sh
+```
+
+**Force Restart JACK** (apply new latency settings):
+```bash
+./start.sh --restart-jack
+```
+
+**Stop Everything** (safe to unplug USB audio after):
+```bash
+./start.sh --stop
+```
+
+**Ctrl+C** also performs a clean shutdown - stops Node, Pure Data, and JACK on Linux. You'll see:
+```
+🧹 Cleaning up...
+✅ Stopped. Safe to unplug audio device.
+```
+
+### Latency Tuning (Linux/Pi)
+
+The default JACK settings target ~5ms latency (128 frames × 2 periods @ 48kHz). If you experience audio glitches (xruns), edit `start.sh` line ~103 and adjust:
+
+| Setting | Latency | Stability |
+|---------|---------|-----------|
+| `-p 128 -n 2` | ~5ms | Aggressive (default) |
+| `-p 256 -n 2` | ~10ms | Balanced |
+| `-p 256 -n 3` | ~16ms | Safe |
+| `-p 512 -n 3` | ~32ms | Very stable |
+
+After changing, restart with:
+```bash
+./start.sh --restart-jack
+```
+
 ### Troubleshooting (Raspberry Pi)
 
 **"jack wont start" / D-Bus Error**:
