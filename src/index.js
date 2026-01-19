@@ -45,28 +45,46 @@ const midiDeviceName = midiArg ? midiArg.split('=')[1] : 'XONE';
 const midi = CONFIG.midi[midiDeviceName] || CONFIG.midi.XONE;
 console.log(`MIDI Config: ${midi.midiName} (requested: ${midiDeviceName})`);
 
-const inputDeviceName = inputs.find(n => n.toLowerCase().includes(midi.midiName.toLowerCase()));
+// Find input port matching our device
+const inputIndex = inputs.findIndex(n => n.toLowerCase().includes(midi.midiName.toLowerCase()));
 
-if (!inputDeviceName) {
+if (inputIndex === -1) {
     console.error(`❌ MIDI Input device matching "${midi.midiName}" not found.`);
     console.error(`Available inputs: `, inputs);
     process.exit(1);
 }
 
-console.log(`✅ Connected to ${inputDeviceName}`);
-const input = new easymidi.Input(inputDeviceName);
+const inputDeviceName = inputs[inputIndex];
+console.log(`✅ MIDI Input [${inputIndex}]: ${inputDeviceName}`);
 
-// On Linux, output ports may have different names - search separately
+// On Linux, open by index; on macOS, open by name
+let input;
+try {
+    // Try opening by index first (works better on Linux/ALSA)
+    input = new easymidi.Input(inputIndex);
+} catch (err) {
+    console.warn(`   Retrying with device name...`);
+    input = new easymidi.Input(inputDeviceName);
+}
+
+// Find output port matching our device
 const outputs = easymidi.getOutputs();
-const outputDeviceName = outputs.find(n => n.toLowerCase().includes(midi.midiName.toLowerCase()));
+const outputIndex = outputs.findIndex(n => n.toLowerCase().includes(midi.midiName.toLowerCase()));
 
 let output = null;
-if (outputDeviceName) {
+if (outputIndex !== -1) {
+    const outputDeviceName = outputs[outputIndex];
     try {
-        output = new easymidi.Output(outputDeviceName);
-        console.log(`✅ LED Output: ${outputDeviceName}`);
+        // Try opening by index first
+        output = new easymidi.Output(outputIndex);
+        console.log(`✅ MIDI Output [${outputIndex}]: ${outputDeviceName}`);
     } catch (err) {
-        console.warn(`⚠️  Could not open MIDI output (LEDs disabled): ${err.message}`);
+        try {
+            output = new easymidi.Output(outputDeviceName);
+            console.log(`✅ MIDI Output: ${outputDeviceName}`);
+        } catch (err2) {
+            console.warn(`⚠️  Could not open MIDI output (LEDs disabled): ${err2.message}`);
+        }
     }
 } else {
     console.warn(`⚠️  MIDI Output device not found (LEDs disabled). Available: `, outputs);
