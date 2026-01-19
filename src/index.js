@@ -60,26 +60,44 @@ console.log(`✅ MIDI Input [${inputIndex}]: ${inputDeviceName}`);
 // Helper function to sleep
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// On Linux, MIDI ports can be flaky - retry with delays
+// On Linux, MIDI ports can be flaky - try multiple approaches
 let input;
 const openMidiInput = async () => {
     const maxRetries = 3;
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        // Strategy 1: Try by index
         try {
-            // Try opening by index first (works better on Linux/ALSA)
+            console.log(`   Attempt ${attempt}: Opening by index ${inputIndex}...`);
             return new easymidi.Input(inputIndex);
         } catch (err1) {
-            try {
-                // Fallback to name
-                return new easymidi.Input(inputDeviceName);
-            } catch (err2) {
-                if (attempt < maxRetries) {
-                    console.warn(`   ⚠️  MIDI open failed (attempt ${attempt}/${maxRetries}), retrying in 1s...`);
-                    await sleep(1000);
-                } else {
-                    throw new Error(`Failed to open MIDI input after ${maxRetries} attempts: ${err2.message}`);
-                }
+            console.log(`   Index failed: ${err1.message}`);
+        }
+
+        // Strategy 2: Try by full name
+        try {
+            console.log(`   Attempt ${attempt}: Opening by name "${inputDeviceName}"...`);
+            return new easymidi.Input(inputDeviceName);
+        } catch (err2) {
+            console.log(`   Name failed: ${err2.message}`);
+        }
+
+        // Strategy 3: Try with just "XONE:PX5" (shorter name)
+        try {
+            const shortName = inputs.find(n => n.includes('XONE'));
+            if (shortName) {
+                console.log(`   Attempt ${attempt}: Opening "${shortName}"...`);
+                return new easymidi.Input(shortName);
             }
+        } catch (err3) {
+            console.log(`   Short name failed: ${err3.message}`);
+        }
+
+        if (attempt < maxRetries) {
+            console.warn(`   ⚠️  All strategies failed (attempt ${attempt}/${maxRetries}), retrying in 1s...`);
+            await sleep(1000);
+        } else {
+            throw new Error(`Failed to open MIDI input after ${maxRetries} attempts`);
         }
     }
 };
