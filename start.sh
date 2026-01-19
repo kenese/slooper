@@ -34,11 +34,16 @@ sleep 1
 
 # Parse arguments for local use
 AUDIO_DEVICE="XONE"
+RESTART_JACK=false
+
 for arg in "$@"
 do
     case $arg in
         audio-device=*)
         AUDIO_DEVICE="${arg#*=}"
+        ;;
+        --restart-jack)
+        RESTART_JACK=true
         ;;
     esac
 done
@@ -77,6 +82,14 @@ echo "🎛️  Opening Pure Data..."
 if [[ "$OSTYPE" == "darwin"* ]]; then
     open src/engine.pd
 else
+    # Linux: Kill JACK if restart requested
+    if [ "$RESTART_JACK" = true ]; then
+        echo "🔄 Restarting JACK (--restart-jack flag)..."
+        pkill -9 jackd 2>/dev/null
+        pkill -9 jackdbus 2>/dev/null
+        sleep 1
+    fi
+    
     # Linux: Start JACK if not running
     if ! pgrep -x jackd > /dev/null && ! pgrep -x jackdbus > /dev/null; then
         echo "🔊 Starting JACK audio server..."
