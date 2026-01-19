@@ -92,9 +92,11 @@ else
             JACK_DEVICE="hw:3"
         fi
         
-        # Start JACK with duplex audio (input AND output)
-        # -P = playback only mode disabled, enables capture too
-        jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 512 -n 3 &
+        # Start JACK with low-latency settings
+        # Buffer: 128 frames × 2 periods = ~5.3ms latency at 48kHz
+        # If you get xruns (audio glitches), increase to: -p 256 -n 2 (~10.7ms)
+        echo "   Latency target: ~5ms (128 frames × 2 periods @ 48kHz)"
+        jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 128 -n 2 &
         sleep 3
     else
         echo "✅ JACK already running"
