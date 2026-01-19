@@ -12,8 +12,7 @@ const CONFIG = {
             midiName: 'XONE',
             slot1: { note: 14, channel: 15, encoderCC: 7 },
             slot2: { note: 15, channel: 15, encoderCC: 7 },
-            monitor1: { note: 10, channel: 15 },
-            monitor2: { note: 36, channel: 15 },
+            monitor: { note: 10, channel: 15 },
             encoderPress1: { note: 28, channel: 15 },
             encoderPress2: { note: 38, channel: 15 },
         },
@@ -21,8 +20,7 @@ const CONFIG = {
             midiName: 'TRAKTOR X1MK3',
             slot1: { note: 10, channel: 0, encoderCC: 20 },  // UPDATE encoderCC after running midi_logger
             slot2: { note: 10, channel: 1, encoderCC: 21 },  // UPDATE encoderCC after running midi_logger
-            monitor1: { note: 11, channel: 0 },
-            monitor2: { note: 11, channel: 1 },
+            monitor: { note: 11, channel: 0 },
             encoderPress1: { note: 20, channel: 0 },
             encoderPress2: { note: 21, channel: 0 },
         },
@@ -149,7 +147,7 @@ function setupMidiHandlers() {
 
     // Monitoring state - single monitor (muted when any loop is playing)
     let monitorEnabled = false;
-    const monitorButton = { note: midi.monitor1.note, channel: midi.monitor1.channel };
+    const monitorButton = { note: midi.monitor.note, channel: midi.monitor.channel };
 
     // Crop tracking per slot
     // Crop tracking per slot
@@ -407,7 +405,7 @@ function setupMidiHandlers() {
     console.log(`  HOLD (1s)     : [S1: Ch${midi.slot1.channel} N${midi.slot1.note}] [S2: Ch${midi.slot2.channel} N${midi.slot2.note}] -> Clear Slot`);
     console.log(`  ENCODER ROTATE: [S1: Ch${midi.slot1.channel} CC${midi.slot1.encoderCC}] [S2: Ch${midi.slot2.channel} CC${midi.slot2.encoderCC}] -> Adjust Length`);
     console.log(`  ENCODER PRESS : [S1: Ch${midi.encoderPress1.channel} N${midi.encoderPress1.note}] [S2: Ch${midi.encoderPress2.channel} N${midi.encoderPress2.note}] -> Reset Length`);
-    console.log(`  MONITOR       : Ch${midi.monitor1.channel} N${midi.monitor1.note} -> Toggle (mutes when loop plays)`);
+    console.log(`  MONITOR       : Ch${midi.monitor.channel} N${midi.monitor.note} -> Toggle (mutes when loop plays)`);
     console.log(`  LED           : [S1: Ch${midi.slot1.channel} N${midi.slot1.note}] [S2: Ch${midi.slot2.channel} N${midi.slot2.note}] -> Visual Feedback`);
     console.log('');
 
