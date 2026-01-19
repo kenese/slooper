@@ -10,7 +10,11 @@ cd "$(dirname "$0")"
 # Define cleanup function
 cleanup() {
     echo ""
-    echo "🧹 Close running instances..."
+    echo "🧹 Cleaning up..."
+    
+    # Kill Node controller
+    pkill -f "node src/index.js" 2>/dev/null
+    
     # Force kill any Pd instances
     if [[ "$OSTYPE" == "darwin"* ]]; then
         killall "Pd-0.55-2" 2>/dev/null
@@ -20,21 +24,21 @@ cleanup() {
     else
         killall pd 2>/dev/null
         pkill -9 pd 2>/dev/null
+        # Also stop JACK on Linux so USB audio can be safely unplugged
+        pkill jackd 2>/dev/null
+        pkill jackdbus 2>/dev/null
     fi
+    
+    echo "✅ Stopped. Safe to unplug audio device."
 }
 
 # Trap EXIT signal (happens on ctrl+c or normal exit) to run cleanup
 trap cleanup EXIT
 
-echo "🔄 Stopping any running instances..."
-pkill -f "node src/index.js" 2>/dev/null
-cleanup
-
-sleep 1
-
-# Parse arguments for local use
+# Parse arguments first (need to check for --stop early)
 AUDIO_DEVICE="XONE"
 RESTART_JACK=false
+STOP_ONLY=false
 
 for arg in "$@"
 do
@@ -45,8 +49,25 @@ do
         --restart-jack)
         RESTART_JACK=true
         ;;
+        --stop)
+        STOP_ONLY=true
+        ;;
     esac
 done
+
+# Handle --stop flag (just cleanup and exit)
+if [ "$STOP_ONLY" = true ]; then
+    echo "🛑 Stopping slooper..."
+    cleanup
+    trap - EXIT  # Remove trap since we already cleaned up
+    exit 0
+fi
+
+echo "🔄 Stopping any running instances..."
+cleanup
+trap cleanup EXIT  # Re-enable trap after manual cleanup
+
+sleep 1
 
 echo "🎛️  Configuring Audio for: $AUDIO_DEVICE"
 
