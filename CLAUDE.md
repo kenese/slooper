@@ -5,7 +5,7 @@
 
 ## Tech Stack
 - **Node.js** (v18+ recommended for Pi compatibility)
-- **Pure Data** (Pd-0.55-2) - Audio processing engine
+- **Pure Data** (Pd-0.55-2 on Pi, Pd-0.56-2 on Mac) - Audio processing engine
 - **JACK Audio** - Low-latency audio routing on Linux/Pi
 - **OSC** - Communication between Node.js and Pure Data (ports 9000/9001)
 - **MIDI** - Hardware control via `easymidi` library
@@ -110,28 +110,51 @@ jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 256 -n 3
 - Pre-record buffer for adjusting loop START point (not implemented)
 - Visual feedback of loop position in Pd (not implemented)
 
-## Refactoring Strategy (Failed Attempt)
-
-### What We Tried
-1. **Abstraction approach**: Create `looper_slot.pd` as a reusable module
-2. **Simplified engine.pd**: Instantiate with `looper_slot slot1` and `looper_slot slot2`
-
-### Why It Failed
-- Pure Data's text format uses object indices for connections
-- Adding objects shifts ALL indices, breaking connections
-- Without visual feedback, impossible to verify correct wiring
-- Multiple attempts resulted in `audio signal outlet connected to nonsignal inlet` errors
-
-### Recommended Approach
-**Use Pure Data GUI to duplicate slot1 visually:**
-1. Open `src/engine.pd` in Pure Data
-2. Select slot1 processing objects
-3. Copy/paste and move to the right
-4. Edit array names: `slot1_data` → `slot2_data`, etc.
-5. Connect slot2 output from main router to new chain
-6. Save and test
-
 ## Important Quirks
+
+### Pure Data Text Editing (DANGER)
+
+**Object index corruption**: Inserting or deleting an object in `engine.pd` text shifts ALL subsequent object indices, breaking every `#X connect` line that references those indices. Even a simple `sed` replacement can cause cascading `connection failed` errors. **Always use the Pd GUI for structural changes.**
+
+**Comma escaping in `expr` objects**: Commas MUST be escaped as `\,` in saved Pd files:
+```
+# CORRECT:
+#X obj 397 500 expr 1000.0 / max(1 \, $f1);
+
+# WRONG (causes "expr: syntax error"):
+#X obj 397 500 expr 1000.0 / max(1, $f1);
+```
+
+**`print` object has NO outlets**: If you see `(print->float) connection failed`, that connection line is garbage. The `print` object is a sink—it has no output. Delete any `#X connect X 0 Y 0;` where X is a `print` object.
+
+### sed Differences Mac vs Linux
+Mac requires an empty string after `-i`, Linux does not. Use this helper:
+```bash
+run_sed() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' -e "$1" "$2"
+    else
+        sed -i -e "$1" "$2"
+    fi
+}
+# Usage: run_sed 's/old/new/' file.pd
+```
+
+### Headless Pi / Patchbox OS
+
+**D-Bus error with JACK**: When running via SSH (no X display), `jack_control` fails with `Unable to autolaunch a dbus-daemon without a $DISPLAY`. Fix:
+```bash
+export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
+# or
+dbus-launch jack_control start
+```
+
+**Pd requires `-nogui`**: Without it, Pd fails with `no display name and no $DISPLAY environment variable`.
+
+**Pd requires `-nomidi`**: Otherwise Pd grabs the MIDI device first and Node.js gets `ALSA error making port connection`. Full command:
+```bash
+pd -nogui -jack -nomidi src/engine.pd &
+```
 
 ### MIDI on Linux/ALSA
 ```javascript
@@ -150,4 +173,87 @@ const shouldMonitor = monitorEnabled && !anyPlaying;
 ### Crop Accumulation
 - Crop deltas are accumulated, not absolute values
 - Original length stored separately from current length
-- Reset clears crop offset back to 0
+- Reset clears crop offset back to 0 (both JS and Pd)
+
+---
+
+## Tribal Knowledge (Bug Fixes)
+
+### Crop Timing Bug (Fixed 2026-01-18)
+**Symptom:** `PENDING_LENGTH` in Pd was always one crop command behind. First crop showed no change, second crop showed the first crop's value, etc.
+
+**Cause:** In `engine.pd`, the trigger object `t f b` (ID 43) fires right-to-left. The bang (`b`) triggered the length calculation BEFORE the float (`f`) updated the `+` object's addend.
+
+**Fix:** Changed `t f b` to `t b f` and swapped connections:
+```
+# Before (wrong order):
+#X obj 400 100 t f b;
+#X connect 43 0 40 1;  # Float to + addend
+#X connect 43 1 39 0;  # Bang to f (calc)
+
+# After (correct order):
+#X obj 400 100 t b f;
+#X connect 43 1 40 1;  # Float to + addend (fires FIRST now)
+#X connect 43 0 39 0;  # Bang to f (calc, fires SECOND)
+```
+
+### Crop Persistence Bug (Fixed 2026-01-18)
+**Symptom:** After clearing a loop and recording a new one, the previous crop adjustments were applied to the new loop immediately. E.g., record 2000ms → crop -300ms → clear → record 5000ms → Pd shows `PENDING_LENGTH: 4700` instead of 5000.
+
+**Cause:** The `+` object (ID 40) that accumulates crop deltas retained its right-inlet value across recordings. Nothing reset it.
+
+**Fix:** Added a `msg 0` triggered by `rec 1` to reset the `+` addend:
+```
+#X msg 250 100 0;
+#X connect 10 0 62 0;  # rec start trigger -> msg 0
+#X connect 62 0 40 1;  # msg 0 -> + right inlet (reset addend)
+```
+
+### Playback Continues After Clear (Observed)
+**Symptom:** After sending `clear`, Pd logs showed `ACTIVE_LENGTH` continuing to output the old loop length (loop kept playing briefly).
+
+**Status:** Masked by the crop persistence fix (rec 1 resets state). May resurface if clear-without-new-recording workflow is used. Needs investigation.
+
+---
+
+## Regression Tests
+
+The following tests in `test/test_engine.js` guard against known bugs:
+
+| Test Name | Guards Against |
+|-----------|----------------|
+| `crop updates PENDING_LENGTH immediately` | Crop timing bug (off-by-one) |
+| `Regression: Crop reset on new recording` | Crop persistence bug |
+| `Over-Record Workflow` | Recording over existing loop |
+| `Crop Extension Logic` | Crop + workflow stability |
+
+---
+
+## ✅ RESOLVED CONTRADICTIONS
+
+The following items were flagged as contradictions during summarization but have been **verified against current working code** (2026-01-19).
+
+### JACK Port Naming on Linux ✅
+- **Verified**: `start.sh` uses `system:capture_9/10 → pure_data:input_1/2` for XONE:PX5
+- **Why it works**: JACK exposes all 10 hardware channels from XONE. The hardware uses channels 9-10 for main input.
+- **Pd ports confirmed**: `pure_data:input_1`, `pure_data:input_2` (underscore, 1-indexed)
+- **SKILLS.md is correct**: Lines 102-103 show the right commands for XONE on Pi
+
+### Pd adc~/dac~ Channel Numbers on Linux ✅
+- **Verified**: `start.sh` lines 95-99 **automatically force** `adc~ 1 2` and `dac~ 1 2` on Linux
+- **Reason**: JACK presents logical port numbers to Pd, not hardware channels. The JACK connections (`system:capture_9`) handle the hardware mapping.
+- **Mac uses**: `adc~ 9 10` (direct hardware access, no JACK)
+- **Linux uses**: `adc~ 1 2` (JACK logical ports, script auto-converts)
+
+### Pure Data Version ✅ (Minor)
+- **Mac currently**: Pd-0.56-2
+- **Cleanup script references**: Pd-0.55-2 (still works, fallback to generic `killall pd`)
+- **Impact**: None—both versions work identically for this project
+
+### Crop Reset Behavior ✅ (Fixed 2026-01-19)
+- **JS behavior**: `handleEncoderPress()` resets `cropOffset` to 0 and sends `/slotX reset 1` to Pd
+- **Pd behavior**: `reset` route now implemented in engine.pd (objects 78-80)
+  - `t b b` sequences the operations (right-to-left: clear addend first, then output original)
+  - `msg 0` → `+` right inlet clears the crop addend
+  - Bang → `f` (object 40) re-outputs the original length
+- **Result**: Encoder press now truly resets both JS tracking AND Pd audio engine to original loop length

@@ -6,7 +6,7 @@
 #X obj 138 60 print OSC_IN;
 #X obj 224 412 adc~ 9 10;
 #X obj 70 700 dac~ 1 2;
-#X obj 100 166 route rec play crop;
+#X obj 100 166 route rec play crop reset;
 #X obj 181 182 print PLAY_CMD;
 #X obj 158 231 sel 1 0;
 #X obj 132 290 t b b;
@@ -176,3 +176,12 @@
 #X connect 7 1 75 1;
 #X connect 75 0 76 0;
 #X connect 76 0 6 1;
+#X obj 300 180 t b b b;
+#X msg 300 210 0;
+#X obj 350 180 print RESET;
+#X connect 7 3 78 0;
+#X connect 7 3 80 0;
+#X connect 78 2 79 0;
+#X connect 79 0 41 1;
+#X connect 78 1 23 0;
+#X connect 78 0 40 0;
