@@ -116,7 +116,7 @@ jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 256 -n 3
 
 ### Pure Data Text Editing (DANGER)
 
-**Object index corruption**: Inserting or deleting an object in `engine.pd` text shifts ALL subsequent object indices, breaking every `#X connect` line that references those indices. Even a simple `sed` replacement can cause cascading `connection failed` errors. **Always use the Pd GUI for structural changes.**
+**Object index corruption**: Inserting or deleting an object in `engine.pd` text shifts ALL subsequent object indices, breaking every `#X connect` line that references those indices. Even a simple `sed` replacement can cause cascading `connection failed` errors. 
 
 **Comma escaping in `expr` objects**: Commas MUST be escaped as `\,` in saved Pd files:
 ```
