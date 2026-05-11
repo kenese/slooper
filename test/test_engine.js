@@ -82,6 +82,10 @@ function sendOSC(addr, ...args) {
     });
 }
 
+function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // Helper to wait for a specific state message from Pure Data
 function expectState(expectedSlot, expectedState, timeoutMs = 1000) {
     return new Promise((resolve, reject) => {
@@ -111,9 +115,25 @@ function expectState(expectedSlot, expectedState, timeoutMs = 1000) {
 }
 
 // Helper to get the length from state messages
-function getLastLength() {
-    const lengthMsg = stateMessages.find(args => args[1] === 'length');
+function getLastLength(expectedSlot = null) {
+    const lengthMsg = [...stateMessages].reverse().find(args =>
+        args[1] === 'length' && (!expectedSlot || args[0] === expectedSlot)
+    );
     return lengthMsg ? lengthMsg[2] : null;
+}
+
+async function recordLoop(slot, durationMs) {
+    const addr = `/${slot}`;
+    await sendOSC(addr, 'rec', 1);
+    await wait(durationMs);
+    stateMessages = [];
+    await sendOSC(addr, 'rec', 0);
+    await expectState(slot, 'stopped');
+    await expectState(slot, 'length');
+
+    const length = getLastLength(slot);
+    assert.ok(length > 0, `${slot} length should be > 0, got ${length}`);
+    return length;
 }
 
 // --- Basic OSC Tests ---
@@ -158,6 +178,32 @@ test('can send slot2 play 1 command', async () => {
 
 test('can send slot2 play 0 command', async () => {
     await sendOSC('/slot2', 'play', 0);
+});
+
+test('slot2 responds with recording/stopped/length states', async () => {
+    await sendOSC('/slot2', 'rec', 1);
+    await expectState('slot2', 'recording');
+    await wait(250);
+
+    stateMessages = [];
+    await sendOSC('/slot2', 'rec', 0);
+    await expectState('slot2', 'stopped');
+    await expectState('slot2', 'length');
+
+    const length = getLastLength('slot2');
+    assert.ok(length > 0, `slot2 length should be > 0, got ${length}`);
+});
+
+test('slot2 responds with playing and paused states', async () => {
+    await recordLoop('slot2', 250);
+
+    stateMessages = [];
+    await sendOSC('/slot2', 'play', 1);
+    await expectState('slot2', 'playing');
+
+    stateMessages = [];
+    await sendOSC('/slot2', 'play', 0);
+    await expectState('slot2', 'paused');
 });
 
 // --- Phase Reset Tests ---
@@ -299,7 +345,7 @@ test('Pd responds with stopped state and length on rec 0', async () => {
     await expectState('slot1', 'stopped');
     await expectState('slot1', 'length');
 
-    const length = getLastLength();
+    const length = getLastLength('slot1');
     assert.ok(length > 0, `Length should be > 0, got ${length}`);
 });
 
@@ -415,18 +461,11 @@ test('crop updates PENDING_LENGTH immediately (regression fix)', async () => {
     // 1. Record a base loop
     await sendOSC('/slot1', 'rec', 1);
     await new Promise(r => setTimeout(r, 400));
+    stateMessages = [];
     await sendOSC('/slot1', 'rec', 0);
 
-    // Wait for initial length to settle
-    await new Promise(r => setTimeout(r, 200));
-    stateMessages = [];
-
-    // Get current length
-    await sendOSC('/slot1', 'play', 0); // Force a status update or just wait
-    // Actually we can just query state or wait for "stopped" which sends length
     await expectState('slot1', 'length');
-    const lenMsg = stateMessages.find(m => m[0] === 'slot1' && m[1] === 'length');
-    const baseLen = lenMsg[2];
+    const baseLen = getLastLength('slot1');
 
     // 2. Clear messages and send ONE crop command
     stateMessages = [];
@@ -466,15 +505,13 @@ test('Regression: Crop reset on new recording', async () => {
     await sendOSC('/slot1', 'rec', 1);
 
     await new Promise(r => setTimeout(r, 400));
+    stateMessages = [];
     await sendOSC('/slot1', 'rec', 0);
     const recDuration = Date.now() - startRecTime;
 
     // 5. Verify Length of Loop B
     // It should be roughly 400ms. If crop persisted (-50), it might be 350ms 
     // OR if PD logic for pending length is flawwed, it triggers immediately.
-
-    stateMessages = [];
-    await sendOSC('/slot1', 'play', 0); // Trigger stopped state which sends length
 
     const lengthMsg = await expectState('slot1', 'length');
     const bLen = lengthMsg[2];
@@ -503,15 +540,11 @@ test('Reset command restores original loop length', async () => {
     // 1. Record a loop
     await sendOSC('/slot1', 'rec', 1);
     await new Promise(r => setTimeout(r, 500));
+    stateMessages = [];
     await sendOSC('/slot1', 'rec', 0);
 
-    // Wait for initial length
-    await new Promise(r => setTimeout(r, 200));
-    stateMessages = [];
-    await sendOSC('/slot1', 'play', 1);
     await expectState('slot1', 'length');
-    const initMsg = stateMessages.find(m => m[0] === 'slot1' && m[1] === 'length');
-    const originalLen = initMsg[2];
+    const originalLen = getLastLength('slot1');
 
     // 2. Crop the loop
     stateMessages = [];
@@ -536,6 +569,47 @@ test('Reset command restores original loop length', async () => {
     await sendOSC('/slot1', 'play', 0);
 });
 
+test('slot2 crop and reset restore original loop length', async () => {
+    const originalLen = await recordLoop('slot2', 500);
+
+    stateMessages = [];
+    await sendOSC('/slot2', 'crop', 90);
+    await expectState('slot2', 'length');
+    const croppedLen = getLastLength('slot2');
+
+    assert.ok(croppedLen > originalLen, `Cropped length ${croppedLen} should be greater than original ${originalLen}`);
+
+    stateMessages = [];
+    await sendOSC('/slot2', 'reset', 1);
+    await expectState('slot2', 'length');
+    const resetLen = getLastLength('slot2');
+
+    assert.ok(Math.abs(resetLen - originalLen) < 10, `Reset length ${resetLen} should equal original ${originalLen}`);
+});
+
+test('slot crop adjustments are cumulative', async () => {
+    const originalLen = await recordLoop('slot1', 500);
+
+    stateMessages = [];
+    await sendOSC('/slot1', 'crop', 30);
+    await expectState('slot1', 'length');
+    const plus30 = getLastLength('slot1');
+
+    stateMessages = [];
+    await sendOSC('/slot1', 'crop', 30);
+    await expectState('slot1', 'length');
+    const plus60 = getLastLength('slot1');
+
+    stateMessages = [];
+    await sendOSC('/slot1', 'crop', -30);
+    await expectState('slot1', 'length');
+    const plus30Again = getLastLength('slot1');
+
+    assert.ok(Math.abs(plus30 - (originalLen + 30)) < 5, `Expected ${originalLen + 30}, got ${plus30}`);
+    assert.ok(Math.abs(plus60 - (originalLen + 60)) < 5, `Expected ${originalLen + 60}, got ${plus60}`);
+    assert.ok(Math.abs(plus30Again - plus30) < 5, `Expected ${plus30}, got ${plus30Again}`);
+});
+
 // --- Clear Tests ---
 
 test('Clear command stops playback and resets slot', async () => {
@@ -550,13 +624,14 @@ test('Clear command stops playback and resets slot', async () => {
     stateMessages = [];
     await sendOSC('/slot1', 'clear', 1);
 
-    // 3. Verify playback stopped (we should NOT see 'playing' state after clear)
-    await new Promise(r => setTimeout(r, 200));
+    // 3. Verify clear emits deterministic stopped and zero-length state
+    await expectState('slot1', 'stopped');
+    await expectState('slot1', 'length');
+    const clearLen = getLastLength('slot1');
 
-    // Try to verify stopped or no playing state
     const playingAfterClear = stateMessages.find(m => m[0] === 'slot1' && m[1] === 'playing');
-    // After clear, there should be no 'playing' state - it should be stopped/paused
-    // Note: Depending on implementation, clear might send 'stopped' or nothing
+    assert.strictEqual(playingAfterClear, undefined, `Clear should not emit playing. Received: ${JSON.stringify(stateMessages)}`);
+    assert.strictEqual(clearLen, 0, `Clear should emit length 0, got ${clearLen}`);
 });
 
 test('Clear followed by new record starts fresh without old crop', async () => {
@@ -587,6 +662,29 @@ test('Clear followed by new record starts fresh without old crop', async () => {
 
     // Loop B should be ~400ms, not 400-100=300ms
     assert.ok(bLen > 350, `Loop B length ${bLen} should be fresh (~400ms), not affected by old crop`);
+});
+
+test('clearing one slot does not clear the other slot', async () => {
+    await recordLoop('slot1', 300);
+    await recordLoop('slot2', 500);
+
+    await sendOSC('/slot1', 'play', 1);
+    await sendOSC('/slot2', 'play', 1);
+
+    stateMessages = [];
+    await sendOSC('/slot1', 'clear', 1);
+    await expectState('slot1', 'stopped');
+    await expectState('slot1', 'length');
+
+    const slot1ClearLen = getLastLength('slot1');
+    const slot2ClearLen = getLastLength('slot2');
+    const slot2Stopped = stateMessages.find(m => m[0] === 'slot2' && m[1] === 'stopped');
+
+    assert.strictEqual(slot1ClearLen, 0, `slot1 clear should emit length 0, got ${slot1ClearLen}`);
+    assert.strictEqual(slot2ClearLen, null, `slot1 clear should not emit slot2 length. Received: ${JSON.stringify(stateMessages)}`);
+    assert.strictEqual(slot2Stopped, undefined, `slot1 clear should not stop slot2. Received: ${JSON.stringify(stateMessages)}`);
+
+    await sendOSC('/slot2', 'play', 0);
 });
 
 // --- Monitor Tests ---

@@ -13,7 +13,7 @@ Currently hardcoded to support the following but should work with any usb midi d
   - **Record/Play**: Seamless recording and playback states.
   - **Clear**: Hold button for 500ms to clear a slot.
   - **Crop/Extend**: Rotate encoder to adjust loop length in real-time. 500ms of audio is recorded after your loop so you can both reduce and extend loop length
-  - **Reset**: Press encoder to reset loop length to original recording. This shit not working tho 
+  - **Reset**: Press encoder to reset loop length to original recording.
 - **Audio Processing**:
   - **Glitch-Free Looping**: Trapezoidal amplitude windowing to prevent clicks at loop points.
   - **Monitoring**: Smart monitoring that auto-mutes when loops are playing.
@@ -116,6 +116,14 @@ Start the application using the provided shell script. This will automatically c
 
 ```bash
 ./start.sh
+```
+
+### Testing
+
+The engine tests are OSC integration tests. Start Pure Data with `src/engine.pd` loaded first, then run:
+
+```bash
+npm test
 ```
 
 ### Configuration
@@ -224,6 +232,5 @@ This means the Raspberry Pi does not see your USB MIDI controller.
 
 ## TODO
 
-- [ ] Fix adjust/crop reset
 - [ ] Pre-record/delay so the loop start can also be adjusted
 - [ ] Visual feedback of loop position in PD

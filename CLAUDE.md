@@ -18,7 +18,8 @@
 slooper/
 ├── src/
 │   ├── index.js          # Node.js MIDI/OSC controller (main logic)
-│   ├── engine.pd         # Pure Data audio engine (audio processing)
+│   ├── engine.pd         # Pure Data top-level patch: OSC/audio routing, slot hosting
+│   ├── looper_slot.pd    # Pure Data per-slot audio engine abstraction
 │   └── midi_logger.js    # Utility to discover MIDI CC values
 ├── test/
 │   └── test_engine.js    # OSC-based integration tests
@@ -52,6 +53,12 @@ Pure Data patches use zero-indexed object numbers in the text format. **Connecti
 - Anti-click envelope using trapezoidal windowing
 - Safety: `max(1, $f1)` to prevent division by zero
 - DSP auto-enabled on loadbang
+- `engine.pd` should stay a thin host patch: OSC parsing/routing, shared audio input/output, monitor path, slot summing, and `netsend`
+- Per-slot recording/playback/crop/reset/clear logic lives in `looper_slot.pd`
+- `looper_slot.pd` abstraction contract:
+  - Argument: slot name, e.g. `[looper_slot slot1]`
+  - Inlets: left audio signal, right audio signal, control messages
+  - Outlets: left loop signal, right loop signal, formatted `/state` OSC message
 
 ### Shell Scripts
 - Use `[[ "$OSTYPE" == "darwin"* ]]` for Mac detection
@@ -92,12 +99,14 @@ jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 256 -n 2
 jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 256 -n 3
 ```
 
-## Current State (as of 2026-01-19)
+## Current State (as of 2026-05-11)
 
 ### ✅ Working
-- **Slot 1 audio**: Recording, playback, stop/resume, clear
-- **Crop/extend**: Encoder adjusts loop length with debouncing
-- **Reset**: Encoder press resets length to original
+- **Slot 1 and slot 2 audio**: Recording, playback, stop/resume, clear
+- **Slot abstraction**: `looper_slot.pd` implements per-slot audio/state logic, instantiated by `engine.pd` for each slot
+- **Crop/extend**: Encoder adjusts loop length with debouncing and cumulative Pd length updates
+- **Reset**: Encoder press resets cropped length to original recording length
+- **Clear**: Pd handles `/slotX clear 1` directly, stops playback, clears length/crop state, and emits zero length/stopped state
 - **Anti-click envelope**: Trapezoidal windowing prevents loop point clicks
 - **Single monitor**: Toggle mutes when any loop is playing
 - **LED sync**: Visual feedback on MIDI controller
@@ -105,8 +114,7 @@ jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 256 -n 3
 - **Clean shutdown**: Ctrl+C stops JACK on Linux for safe USB unplug
 
 ### ❌ Not Working / TODO
-- **Slot 2 audio**: OSC routing exists but Pure Data has no audio processing for slot2
-- The `route slot1 slot2 monitor connect` object receives slot2 messages but they go nowhere
+- None currently known for the slot extraction baseline
 
 ### 🔧 Partially Working
 - Pre-record buffer for adjusting loop START point (not implemented)
@@ -128,6 +136,8 @@ jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 256 -n 3
 ```
 
 **`print` object has NO outlets**: If you see `(print->float) connection failed`, that connection line is garbage. The `print` object is a sink—it has no output. Delete any `#X connect X 0 Y 0;` where X is a `print` object.
+
+**Abstraction arguments use `$1`, not `#1`**: In Pd abstraction files, use `$1` for the first creation argument. In saved `.pd` text this appears as `\$1`. Using `#1` is literal and will emit state messages like `#1 recording` instead of `slot1 recording`. Slot-local arrays should use names like `\$1_data` and `\$1_data_R`.
 
 ### sed Differences Mac vs Linux
 Mac requires an empty string after `-i`, Linux does not. Use this helper:
@@ -211,10 +221,10 @@ const shouldMonitor = monitorEnabled && !anyPlaying;
 #X connect 62 0 40 1;  # msg 0 -> + right inlet (reset addend)
 ```
 
-### Playback Continues After Clear (Observed)
+### Playback Continues After Clear (Fixed 2026-05-11)
 **Symptom:** After sending `clear`, Pd logs showed `ACTIVE_LENGTH` continuing to output the old loop length (loop kept playing briefly).
 
-**Status:** Masked by the crop persistence fix (rec 1 resets state). May resurface if clear-without-new-recording workflow is used. Needs investigation.
+**Fix:** `looper_slot.pd` now routes `clear` directly. Clear stops tabwrites/playback gates, resets phasor/crop/current/original/playback length state, emits `/state slotX length 0`, and emits `/state slotX stopped`.
 
 ---
 
@@ -226,6 +236,10 @@ The following tests in `test/test_engine.js` guard against known bugs:
 |-----------|----------------|
 | `crop updates PENDING_LENGTH immediately` | Crop timing bug (off-by-one) |
 | `Regression: Crop reset on new recording` | Crop persistence bug |
+| `slot crop adjustments are cumulative` | Repeated crop deltas must accumulate |
+| `slot2 crop and reset restore original loop length` | Slot abstraction parity for reset/crop |
+| `Clear command stops playback and resets slot` | Clear must be handled inside Pd |
+| `clearing one slot does not clear the other slot` | Cross-slot clear independence |
 | `Over-Record Workflow` | Recording over existing loop |
 | `Crop Extension Logic` | Crop + workflow stability |
 

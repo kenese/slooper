@@ -7,8 +7,8 @@
 #X obj 14 130 adc~ 1 2;
 #X obj 184 479 dac~ 1 2;
 #X obj 535 8 loadbang;
-#X msg 535 35 \; pd dsp 1;
-#X obj 605 8 print DSP_ON;
+#X msg 535 63 \; pd dsp 1;
+#X obj 549 37 print DSP_ON;
 #X obj 14 283 looper_slot slot1;
 #X obj 134 283 looper_slot slot2;
 #X obj 14 165 *~ 0.8;
@@ -39,8 +39,8 @@
 #X connect 3 3 23 0;
 #X connect 5 0 12 0;
 #X connect 5 1 13 0;
-#X connect 7 0 8 0;
 #X connect 7 0 9 0;
+#X connect 7 0 8 0;
 #X connect 10 0 14 0;
 #X connect 10 1 15 0;
 #X connect 10 2 21 0;
