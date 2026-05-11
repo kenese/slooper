@@ -25,8 +25,8 @@ Currently hardcoded to support the following but should work with any usb midi d
 
 ### Prerequisites
 
-- **Node.js**: (v14+ recommended)
-- **Pure Data**: (Tested with Pd-0.55-2)
+- **Node.js**: v18+ recommended for Raspberry Pi compatibility
+- **Pure Data**: Tested with Pd-0.55-2 on Pi and Pd-0.56-2 on Mac
 - **Git**
 
 ### Installation
@@ -81,12 +81,10 @@ If you are running this on a Raspberry Pi using Patchbox OS, you will need to in
    ```bash
    sudo apt-get install libasound2-dev
    ```
-   *Note: Ensure you are running Node.js v14.14+ (older versions don't support `node:` imports used by dependencies).*
-   ```bash
+   *Note: Use Node.js v18+ for the best Raspberry Pi/Patchbox compatibility.*
    ```bash
    node -v 
-   # If older than v14.14, you MUST upgrade.
-   # We recommend Node.js v18 LTS as it has the best compatibility with Raspberry Pi (ARMv7/ARM64) and Patchbox OS.
+   # If older than v18, upgrade.
    
    # 1. Remove old version (optional but recommended)
    sudo apt remove nodejs npm
@@ -120,10 +118,22 @@ Start the application using the provided shell script. This will automatically c
 
 ### Testing
 
-The engine tests are OSC integration tests. Start Pure Data with `src/engine.pd` loaded first, then run:
+Unit tests do not need Pure Data, MIDI hardware, JACK, or an audio device:
 
 ```bash
 npm test
+```
+
+The engine tests are OSC integration tests. Start Pure Data with `src/engine.pd` loaded first, then run:
+
+```bash
+npm run test:engine
+```
+
+You can also ask the test runner to start Pd headless:
+
+```bash
+npm run test:engine:managed
 ```
 
 ## Pure Data Architecture
@@ -210,14 +220,22 @@ You can customize the hardware setup using command-line arguments:
 
 **Select Audio Device:**
 ```bash
-# Default (XONE: adc 9 10, dac 1 2)
+# Default XONE profile.
+# On Linux/JACK, Pd stays on logical adc~ 1 2 / dac~ 1 2 and JACK maps hardware capture_9/10.
+# On Mac, ./start.sh generates .runtime/engine.pd for direct device channel selection.
 ./start.sh
 
-# Traktor Z1 (adc 1 2, dac 3 4)
+# Traktor Z1
 ./start.sh audio-device=Z1
 
-# Mac/BlackHole dev (adc 1 2, dac 1 2)
+# Mac/BlackHole dev
 ./start.sh device=MAC
+```
+
+Inspect the resolved runtime config without starting anything:
+
+```bash
+./start.sh --print-config device=MAC midi-device=OSC
 ```
 
 **Combine Arguments:**
@@ -250,20 +268,25 @@ By default, resuming a paused loop happens on button **release** rather than pre
 ./start.sh --restart-jack
 ```
 
-**Stop Everything** (safe to unplug USB audio after):
+**Stop Slooper-managed processes**:
 ```bash
 ./start.sh --stop
 ```
 
-**Ctrl+C** also performs a clean shutdown - stops Node, Pure Data, and JACK on Linux. You'll see:
+For a dedicated appliance or emergency cleanup, use:
+```bash
+./start.sh --force-cleanup --stop
 ```
-🧹 Cleaning up...
-✅ Stopped. Safe to unplug audio device.
+
+**Ctrl+C** also performs a clean shutdown of processes started and tracked by Slooper. You'll see:
+```
+Cleaning up Slooper-managed processes...
+Stopped Slooper-managed processes.
 ```
 
 ### Latency Tuning (Linux/Pi)
 
-The default JACK settings target ~5ms latency (128 frames × 2 periods @ 48kHz). If you experience audio glitches (xruns), edit `start.sh` line ~103 and adjust:
+The default JACK settings target ~5ms latency (128 frames x 2 periods @ 48kHz). If you experience audio glitches (xruns), adjust `jack.periodSize` and `jack.periods` in `src/config.js`:
 
 | Setting | Latency | Stability |
 |---------|---------|-----------|
@@ -294,7 +317,7 @@ This means the Raspberry Pi does not see your USB MIDI controller.
 1. Check that the USB cable is connected and the device is powered on.
 2. Run `lsusb` to see if the device acts up in the USB list.
 3. Run `aconnect -l` to see available ALSA MIDI ports.
-4. If you are using a different controller, update the `start.sh` command (e.g., `midi-device=X1MK3`) or modify `src/index.js` to match your device's name.
+4. If you are using a different controller, update the `start.sh` command (e.g., `midi-device=X1MK3`) or add the MIDI mapping in `src/config.js`.
 
 ## TODO
 

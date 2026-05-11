@@ -2,20 +2,27 @@
   "name": "slooper",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
-    "test": "npm run test:engine",
-    "test:engine": "node test/test_engine.js"
+    "test": "npm run test:unit",
+    "test:all": "npm run test:unit && npm run test:engine",
+    "test:unit": "node --test test/unit/*.test.js",
+    "test:engine": "node test/test_engine.js",
+    "test:engine:managed": "node test/run_engine_tests.js",
+    "dev:mac": "./start.sh device=MAC midi-device=OSC",
+    "midi:log": "node src/midi_logger.js",
+    "osc:debug": "node scripts/debug_osc.js",
+    "osc:send": "node scripts/send_osc.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "easymidi": "^3.1.0",
-    "node-osc": "^11.2.2",
-    "puppeteer": "^24.40.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "node-osc": "^11.2.2"
   }
 }

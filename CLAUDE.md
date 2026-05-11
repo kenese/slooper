@@ -87,7 +87,7 @@ Pure Data patches use zero-indexed object numbers in the text format. **Connecti
 - Use ES6+ syntax (const, let, arrow functions)
 - State machine pattern for slot states: `0=EMPTY, 1=RECORDING, 2=PLAYING, 3=STOPPED`
 - MIDI devices configured in `MIDI_CONFIGS` object at top of file
-- Throttled encoder updates (CONFIG.throttleMs = 100)
+- Throttled encoder updates (`controller.encoderThrottleMs = 50` in `src/config.js`)
 - Hold detection for clear function (CONFIG.holdThresholdMs = 500)
 - Play-on-release (default): Resuming a paused loop waits for button release (prevents playback during hold-to-delete)
 - Pass `play-on-press` arg to get instant playback on button press instead
@@ -313,10 +313,10 @@ The following items were flagged as contradictions during summarization but have
 - **SKILLS.md is correct**: Lines 102-103 show the right commands for XONE on Pi
 
 ### Pd adc~/dac~ Channel Numbers on Linux ✅
-- **Verified**: `start.sh` lines 95-99 **automatically force** `adc~ 1 2` and `dac~ 1 2` on Linux
-- **Reason**: JACK presents logical port numbers to Pd, not hardware channels. The JACK connections (`system:capture_9`) handle the hardware mapping.
-- **Mac uses**: `adc~ 9 10` (direct hardware access, no JACK)
-- **Linux uses**: `adc~ 1 2` (JACK logical ports, script auto-converts)
+- **Verified**: tracked `src/engine.pd` stays on logical `adc~ 1 2` and `dac~ 1 2`
+- **Reason**: JACK presents logical port numbers to Pd, not hardware channels. The configured JACK connections (`system:capture_9/10` for XONE) handle the hardware mapping.
+- **Mac uses**: generated `.runtime/engine.pd` when direct device channels such as XONE `adc~ 9 10` are needed
+- **Linux uses**: tracked `src/engine.pd` with logical `adc~ 1 2` and `dac~ 1 2`
 
 ### Pure Data Version ✅ (Minor)
 - **Mac currently**: Pd-0.56-2

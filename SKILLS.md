@@ -36,8 +36,11 @@ cd ~/slooper
 # Force restart JACK (use after changing latency settings)
 ./start.sh --restart-jack
 
-# Stop everything cleanly (safe to unplug USB audio after)
+# Stop Slooper-managed processes cleanly
 ./start.sh --stop
+
+# Emergency cleanup for a dedicated appliance
+./start.sh --force-cleanup --stop
 
 # Use Traktor X1 MK3 controller
 ./start.sh midi-device=X1MK3
@@ -59,13 +62,13 @@ cd ~/slooper
 ### Stop the Looper
 ```bash
 # Press Ctrl+C in the terminal running ./start.sh
-# This cleanly stops Node, Pure Data, and JACK (on Linux)
+# This stops processes started and tracked by Slooper.
 
-# Or manually:
-pkill -f "node src/index.js"
-pkill -f "node src/dev_controller.js"
-pkill pd
-pkill jackd  # Linux only
+# Or from another terminal:
+./start.sh --stop
+
+# Dedicated appliance / emergency cleanup only:
+./start.sh --force-cleanup --stop
 ```
 
 ## Raspberry Pi Deployment
@@ -128,11 +131,14 @@ jack_connect system:capture_10 pure_data:input_2
 
 ### Run Integration Tests
 ```bash
-# First, start the looper in one terminal
-./start.sh
-
-# In another terminal, run tests
+# Unit tests do not need Pd or hardware
 npm test
+
+# Engine tests require Pure Data
+npm run test:engine
+
+# Or let the test runner start Pd headless
+npm run test:engine:managed
 ```
 
 ### Test Specific Features
@@ -151,12 +157,12 @@ npm test
 ./start.sh device=MAC midi-device=OSC
 
 # Or send one-off OSC commands from another terminal
-node send_osc.js /slot1 rec 1
-node send_osc.js /slot1 rec 0
-node send_osc.js /slot1 play 1
-node send_osc.js /slot1 crop -30
-node send_osc.js /slot1 reset 1
-node send_osc.js /monitor 1
+node scripts/send_osc.js /slot1 rec 1
+node scripts/send_osc.js /slot1 rec 0
+node scripts/send_osc.js /slot1 play 1
+node scripts/send_osc.js /slot1 crop -30
+node scripts/send_osc.js /slot1 reset 1
+node scripts/send_osc.js /monitor 1
 ```
 
 ### Watch Pure Data Console
@@ -172,7 +178,7 @@ On Mac, the Pd window shows debug output:
 ```bash
 node src/midi_logger.js
 # Then press buttons/turn encoders to see MIDI values
-# Update MIDI_CONFIGS in index.js with discovered values
+# Update the MIDI mapping in src/config.js with discovered values
 ```
 
 ## Pure Data Editing
@@ -277,9 +283,7 @@ sudo node src/index.js midi-device=XONE
 
 ### Audio Glitches (Xruns)
 ```bash
-# Edit start.sh line ~103, increase buffer:
-# Change: -p 128 -n 2
-# To:     -p 256 -n 2
+# Update the JACK period values in src/config.js, then restart JACK:
 ./start.sh --restart-jack
 ```
 
@@ -293,10 +297,7 @@ git push origin main
 ```
 
 ### Discard Local Changes
-```bash
-git checkout HEAD -- src/engine.pd  # Restore specific file
-git checkout HEAD -- .              # Restore all files
-```
+Ask before discarding work. In particular, do not discard Pd patch changes unless you know they are yours and have checked `git diff -- src/engine.pd src/looper_slot.pd`.
 
 ### Update Pi After Push
 ```bash

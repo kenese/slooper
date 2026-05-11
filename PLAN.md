@@ -393,7 +393,7 @@ The transport should be injectable so unit tests can assert OSC command sequence
     "test:engine:managed": "node test/run_engine_tests.js",
     "dev:mac": "./start.sh device=MAC midi-device=OSC",
     "midi:log": "node src/midi_logger.js",
-    "osc:debug": "node debug_osc.js"
+    "osc:debug": "node scripts/debug_osc.js"
   }
 }
 ```
