@@ -39,6 +39,7 @@ test('loads explicit JSON audio and MIDI config files', () => {
     assert.deepEqual(config.audio.capturePorts, ['system:capture_9', 'system:capture_10']);
     assert.equal(config.midi.slot1.note, 14);
     assert.equal(config.midi.slot1.encoderCC, 7);
+    assert.equal(config.midi.slot1.startEncoderCC, undefined);
 });
 
 test('legacy aliases resolve to bundled JSON configs', () => {
@@ -140,6 +141,37 @@ test('rejects unsupported MIDI encoder modes', () => {
         }),
         /unsupported encoder mode: absolute/
     );
+});
+
+test('loads optional start crop encoder controls when configured', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-start-encoder-'));
+    const file = path.join(dir, 'start-encoders.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Start Encoder MIDI',
+        match: 'Start Encoder',
+        controls: {
+            slot1Button: { type: 'note', note: 1, channel: 0 },
+            slot2Button: { type: 'note', note: 2, channel: 0 },
+            slot1Encoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+            slot2Encoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
+            slot1StartEncoder: { type: 'cc', controller: 12, channel: 0, mode: 'relative-64' },
+            slot2StartEncoder: { type: 'cc', controller: 13, channel: 1, mode: 'relative-64' },
+            slot1Reset: { type: 'note', note: 3, channel: 0 },
+            slot2Reset: { type: 'note', note: 4, channel: 0 },
+            monitorButton: { type: 'note', note: 5, channel: 0 },
+        },
+    }));
+
+    const config = getRuntimeConfig({
+        midiConfigPath: file,
+        audioDevice: 'MAC',
+        projectRoot: path.join(__dirname, '../..'),
+    });
+
+    assert.equal(config.midi.slot1.startEncoderCC, 12);
+    assert.equal(config.midi.slot1.startEncoderChannel, 0);
+    assert.equal(config.midi.slot2.startEncoderCC, 13);
+    assert.equal(config.midi.slot2.startEncoderChannel, 1);
 });
 
 test('runtime_config parses explicit config path arguments', () => {

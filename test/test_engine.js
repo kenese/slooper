@@ -14,8 +14,8 @@
 const { Client, Server } = require('node-osc');
 const assert = require('assert');
 
-const OSC_SEND_PORT = 9000;
-const OSC_RECEIVE_PORT = 9001;
+const OSC_SEND_PORT = Number(process.env.SLOOPER_OSC_SEND_PORT || 9000);
+const OSC_RECEIVE_PORT = Number(process.env.SLOOPER_OSC_STATE_PORT || 9001);
 const client = new Client('127.0.0.1', OSC_SEND_PORT);
 
 // OSC server to receive state responses from Pure Data
@@ -608,6 +608,28 @@ test('slot crop adjustments are cumulative', async () => {
     assert.ok(Math.abs(plus30 - (originalLen + 30)) < 5, `Expected ${originalLen + 30}, got ${plus30}`);
     assert.ok(Math.abs(plus60 - (originalLen + 60)) < 5, `Expected ${originalLen + 60}, got ${plus60}`);
     assert.ok(Math.abs(plus30Again - plus30) < 5, `Expected ${plus30}, got ${plus30Again}`);
+});
+
+test('slot start crop adjusts playback length and emits start offset', async () => {
+    const originalLen = await recordLoop('slot1', 500);
+
+    stateMessages = [];
+    await sendOSC('/slot1', 'cropStart', -90);
+    const extendedStartMsg = await expectState('slot1', 'start');
+    await expectState('slot1', 'length');
+    const extendedLen = getLastLength('slot1');
+
+    assert.ok(Math.abs(extendedStartMsg[2] - (-90)) < 5, `Start offset should be -90, got ${extendedStartMsg[2]}`);
+    assert.ok(Math.abs(extendedLen - (originalLen + 90)) < 5, `Expected start extension length ${originalLen + 90}, got ${extendedLen}`);
+
+    stateMessages = [];
+    await sendOSC('/slot1', 'cropStart', 30);
+    const trimmedStartMsg = await expectState('slot1', 'start');
+    await expectState('slot1', 'length');
+    const trimmedLen = getLastLength('slot1');
+
+    assert.ok(Math.abs(trimmedStartMsg[2] - (-60)) < 5, `Start offset should accumulate to -60, got ${trimmedStartMsg[2]}`);
+    assert.ok(Math.abs(trimmedLen - (originalLen + 60)) < 5, `Expected accumulated start crop length ${originalLen + 60}, got ${trimmedLen}`);
 });
 
 // --- Clear Tests ---

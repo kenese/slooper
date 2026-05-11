@@ -67,6 +67,8 @@ async function handleAction(action, slotId) {
 
     if (action === 'tap') await controller.tapSlot(slotId);
     else if (action === 'clear') await controller.clearSlot(slotId);
+    else if (action === 'cropStartDown') await controller.cropStartSlot(slotId, -runtimeConfig.controller.cropStepMs);
+    else if (action === 'cropStartUp') await controller.cropStartSlot(slotId, runtimeConfig.controller.cropStepMs);
     else if (action === 'cropDown') await controller.cropSlot(slotId, -runtimeConfig.controller.cropStepMs);
     else if (action === 'cropUp') await controller.cropSlot(slotId, runtimeConfig.controller.cropStepMs);
     else if (action === 'reset') await controller.resetSlot(slotId);

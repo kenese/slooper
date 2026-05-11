@@ -152,6 +152,18 @@ function requireMidiControl(controls, name, type) {
     if (!control) {
         throw new Error(`Missing MIDI control: ${name}`);
     }
+    return validateMidiControl(control, name, type);
+}
+
+function optionalMidiControl(controls, name, type) {
+    const control = controls[name];
+    if (!control) {
+        return null;
+    }
+    return validateMidiControl(control, name, type);
+}
+
+function validateMidiControl(control, name, type) {
     if (control.type !== type) {
         throw new Error(`MIDI control ${name} must be type ${type}`);
     }
@@ -186,6 +198,8 @@ function validateMidiConfig(raw) {
     requireMidiControl(controls, 'slot2Button', 'note');
     requireMidiControl(controls, 'slot1Encoder', 'cc');
     requireMidiControl(controls, 'slot2Encoder', 'cc');
+    optionalMidiControl(controls, 'slot1StartEncoder', 'cc');
+    optionalMidiControl(controls, 'slot2StartEncoder', 'cc');
     requireMidiControl(controls, 'slot1Reset', 'note');
     requireMidiControl(controls, 'slot2Reset', 'note');
     requireMidiControl(controls, 'monitorButton', 'note');
@@ -203,6 +217,8 @@ function normalizeMidiConfig(raw) {
     }
 
     const controls = raw.controls || {};
+    const slot1StartEncoder = controls.slot1StartEncoder || {};
+    const slot2StartEncoder = controls.slot2StartEncoder || {};
 
     return {
         name: raw.name,
@@ -214,6 +230,9 @@ function normalizeMidiConfig(raw) {
             encoderCC: controls.slot1Encoder.controller,
             encoderChannel: controls.slot1Encoder.channel,
             encoderMode: controls.slot1Encoder.mode,
+            startEncoderCC: slot1StartEncoder.controller,
+            startEncoderChannel: slot1StartEncoder.channel,
+            startEncoderMode: slot1StartEncoder.mode,
         },
         slot2: {
             note: controls.slot2Button.note,
@@ -221,6 +240,9 @@ function normalizeMidiConfig(raw) {
             encoderCC: controls.slot2Encoder.controller,
             encoderChannel: controls.slot2Encoder.channel,
             encoderMode: controls.slot2Encoder.mode,
+            startEncoderCC: slot2StartEncoder.controller,
+            startEncoderChannel: slot2StartEncoder.channel,
+            startEncoderMode: slot2StartEncoder.mode,
         },
         monitor: {
             note: controls.monitorButton.note,

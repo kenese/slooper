@@ -221,9 +221,17 @@ function setupMidiHandlers(input, output) {
 
     input.on('cc', (msg) => {
         let slotId = null;
+        let target = 'end';
         if (msg.controller === midi.slot1.encoderCC && msg.channel === (midi.slot1.encoderChannel ?? midi.slot1.channel)) slotId = 1;
         else if (msg.controller === midi.slot2.encoderCC && msg.channel === (midi.slot2.encoderChannel ?? midi.slot2.channel)) slotId = 2;
-        if (slotId) handleEncoder(slotId, msg.value);
+        else if (midi.slot1.startEncoderCC !== undefined && msg.controller === midi.slot1.startEncoderCC && msg.channel === (midi.slot1.startEncoderChannel ?? midi.slot1.channel)) {
+            slotId = 1;
+            target = 'start';
+        } else if (midi.slot2.startEncoderCC !== undefined && msg.controller === midi.slot2.startEncoderCC && msg.channel === (midi.slot2.startEncoderChannel ?? midi.slot2.channel)) {
+            slotId = 2;
+            target = 'start';
+        }
+        if (slotId) handleEncoder(slotId, msg.value, target);
     });
 
     function handleRelease(slot) {
@@ -239,23 +247,31 @@ function setupMidiHandlers(input, output) {
         slot.actionFired = false;
     }
 
-    function handleEncoder(slotId, value) {
+    function handleEncoder(slotId, value, target) {
         let delta = 0;
         if (value > 64) delta = runtimeConfig.controller.cropStepMs;
         else if (value < 64) delta = -runtimeConfig.controller.cropStepMs;
 
         if (delta === 0) return;
 
+        if (target === 'start') {
+            controller.scheduleStartCrop(slotId, delta, (slot) => {
+                const offset = slot.startCropOffset >= 0 ? `+${slot.startCropOffset}` : slot.startCropOffset;
+                console.log(`[Slot ${slot.id}] start crop ${offset}ms`);
+            });
+            return;
+        }
+
         controller.scheduleCrop(slotId, delta, (slot) => {
             const offset = slot.cropOffset >= 0 ? `+${slot.cropOffset}` : slot.cropOffset;
-            console.log(`[Slot ${slot.id}] loop: ${slot.lengthMs + slot.cropOffset}ms [crop ${offset}ms]`);
+            console.log(`[Slot ${slot.id}] loop: ${slot.lengthMs + slot.cropOffset - slot.startCropOffset}ms [end crop ${offset}ms]`);
         });
     }
 
     function handleEncoderPress(slotId) {
         const slot = controller.getSlot(slotId);
         if (!slot || slot.state !== SlotState.PLAYING) return;
-        console.log(`[Slot ${slotId}] loop: ${slot.lengthMs}ms [crop 0ms] (reset)`);
+        console.log(`[Slot ${slotId}] loop: ${slot.lengthMs}ms [start/end crop 0ms] (reset)`);
         controller.resetSlot(slotId).catch((err) => console.error(err.message));
     }
 
@@ -288,7 +304,12 @@ function setupMidiHandlers(input, output) {
     console.log('Controls (Runtime MIDI Values):');
     console.log(`  TAP           : [S1: Ch${midi.slot1.channel} N${midi.slot1.note}] [S2: Ch${midi.slot2.channel} N${midi.slot2.note}] -> Record/Play/Stop`);
     console.log(`  HOLD (${runtimeConfig.controller.holdThresholdMs}ms): [S1: Ch${midi.slot1.channel} N${midi.slot1.note}] [S2: Ch${midi.slot2.channel} N${midi.slot2.note}] -> Clear Slot`);
-    console.log(`  ENCODER ROTATE: [S1: Ch${midi.slot1.channel} CC${midi.slot1.encoderCC}] [S2: Ch${midi.slot2.channel} CC${midi.slot2.encoderCC}] -> Adjust Length`);
+    console.log(`  END ENCODER   : [S1: Ch${midi.slot1.encoderChannel ?? midi.slot1.channel} CC${midi.slot1.encoderCC}] [S2: Ch${midi.slot2.encoderChannel ?? midi.slot2.channel} CC${midi.slot2.encoderCC}] -> Adjust Loop End`);
+    if (midi.slot1.startEncoderCC !== undefined || midi.slot2.startEncoderCC !== undefined) {
+        const s1 = midi.slot1.startEncoderCC !== undefined ? `Ch${midi.slot1.startEncoderChannel ?? midi.slot1.channel} CC${midi.slot1.startEncoderCC}` : 'not mapped';
+        const s2 = midi.slot2.startEncoderCC !== undefined ? `Ch${midi.slot2.startEncoderChannel ?? midi.slot2.channel} CC${midi.slot2.startEncoderCC}` : 'not mapped';
+        console.log(`  START ENCODER : [S1: ${s1}] [S2: ${s2}] -> Adjust Loop Start`);
+    }
     console.log(`  ENCODER PRESS : [S1: Ch${midi.encoderPress1.channel} N${midi.encoderPress1.note}] [S2: Ch${midi.encoderPress2.channel} N${midi.encoderPress2.note}] -> Reset Length`);
     console.log(`  MONITOR       : Ch${midi.monitor.channel} N${midi.monitor.note} -> Toggle (mutes when loop plays)`);
     console.log('');

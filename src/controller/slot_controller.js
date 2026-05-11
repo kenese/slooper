@@ -15,9 +15,13 @@ function createSlot(id) {
         state: SlotState.EMPTY,
         recordStartTime: 0,
         lengthMs: 0,
+        originalLengthMs: 0,
         cropOffset: 0,
+        startCropOffset: 0,
         pendingDelta: 0,
+        pendingStartDelta: 0,
         updateTimer: null,
+        startUpdateTimer: null,
     };
 }
 
@@ -71,8 +75,11 @@ class SlotController {
                 state: slot.state,
                 stateLabel: SlotStateLabel[slot.state],
                 lengthMs: slot.lengthMs,
+                originalLengthMs: slot.originalLengthMs,
                 cropOffset: slot.cropOffset,
-                currentLengthMs: Math.max(0, slot.lengthMs + slot.cropOffset),
+                endCropOffset: slot.cropOffset,
+                startCropOffset: slot.startCropOffset,
+                currentLengthMs: slot.lengthMs,
             })),
             monitorEnabled: this.monitorEnabled,
             monitorActive: this.monitorActive,
@@ -94,7 +101,9 @@ class SlotController {
         if (slot.state === SlotState.EMPTY) {
             slot.recordStartTime = this.now();
             slot.cropOffset = 0;
+            slot.startCropOffset = 0;
             slot.lengthMs = 0;
+            slot.originalLengthMs = 0;
             await this.send(address, 'rec', 1);
             slot.state = SlotState.RECORDING;
             this.emitChange();
@@ -103,6 +112,7 @@ class SlotController {
 
         if (slot.state === SlotState.RECORDING) {
             slot.lengthMs = Math.max(0, this.now() - slot.recordStartTime);
+            slot.originalLengthMs = slot.lengthMs;
             await this.send(address, 'rec', 0);
             await this.send(address, 'play', 1);
             slot.state = SlotState.PLAYING;
@@ -140,11 +150,18 @@ class SlotController {
         slot.state = SlotState.EMPTY;
         slot.recordStartTime = 0;
         slot.lengthMs = 0;
+        slot.originalLengthMs = 0;
         slot.cropOffset = 0;
+        slot.startCropOffset = 0;
         slot.pendingDelta = 0;
+        slot.pendingStartDelta = 0;
         if (slot.updateTimer) {
             clearTimeout(slot.updateTimer);
             slot.updateTimer = null;
+        }
+        if (slot.startUpdateTimer) {
+            clearTimeout(slot.startUpdateTimer);
+            slot.startUpdateTimer = null;
         }
     }
 
@@ -155,7 +172,26 @@ class SlotController {
         }
 
         slot.cropOffset += delta;
+        slot.lengthMs = Math.max(100, slot.lengthMs + delta);
         await this.send(slotAddress(slot.id), 'crop', delta);
+        this.emitChange();
+    }
+
+    async cropStartSlot(id, delta) {
+        const slot = this.requireSlot(id);
+        if (slot.state !== SlotState.PLAYING || delta === 0) {
+            return;
+        }
+
+        const nextOffset = Math.max(-1000, Math.min(1000, slot.startCropOffset + delta));
+        const clippedDelta = nextOffset - slot.startCropOffset;
+        if (clippedDelta === 0) {
+            return;
+        }
+
+        slot.startCropOffset = nextOffset;
+        slot.lengthMs = Math.max(100, slot.lengthMs - clippedDelta);
+        await this.send(slotAddress(slot.id), 'cropStart', clippedDelta);
         this.emitChange();
     }
 
@@ -179,6 +215,26 @@ class SlotController {
         }, this.config.encoderThrottleMs);
     }
 
+    scheduleStartCrop(id, delta, onFlush) {
+        const slot = this.requireSlot(id);
+        if (slot.state !== SlotState.PLAYING || delta === 0) {
+            return;
+        }
+
+        slot.pendingStartDelta += delta;
+        if (slot.startUpdateTimer) {
+            return;
+        }
+
+        slot.startUpdateTimer = setTimeout(async () => {
+            const pending = slot.pendingStartDelta;
+            slot.pendingStartDelta = 0;
+            slot.startUpdateTimer = null;
+            await this.cropStartSlot(slot.id, pending);
+            if (onFlush) onFlush(slot, pending);
+        }, this.config.encoderThrottleMs);
+    }
+
     async resetSlot(id) {
         const slot = this.requireSlot(id);
         if (slot.state !== SlotState.PLAYING) {
@@ -186,6 +242,8 @@ class SlotController {
         }
 
         slot.cropOffset = 0;
+        slot.startCropOffset = 0;
+        slot.lengthMs = slot.originalLengthMs || slot.lengthMs;
         await this.send(slotAddress(slot.id), 'reset', 1);
         this.emitChange();
     }
@@ -222,8 +280,18 @@ class SlotController {
         if (stateOrType === 'length') {
             slot.lengthMs = Number(value) || 0;
             if (slot.lengthMs === 0) {
+                slot.originalLengthMs = 0;
                 slot.cropOffset = 0;
+                slot.startCropOffset = 0;
+            } else if (slot.originalLengthMs === 0) {
+                slot.originalLengthMs = slot.lengthMs;
             }
+            this.emitChange();
+            return;
+        }
+
+        if (stateOrType === 'start') {
+            slot.startCropOffset = Number(value) || 0;
             this.emitChange();
             return;
         }

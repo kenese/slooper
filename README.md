@@ -12,8 +12,8 @@ Currently hardcoded to support the following but should work with any usb midi d
 - **Loop Management**:
   - **Record/Play**: Seamless recording and playback states.
   - **Clear**: Hold button for 500ms to clear a slot.
-  - **Crop/Extend**: Rotate encoder to adjust loop length in real-time. 1 second of audio is recorded after your loop so you can both reduce and extend loop length
-  - **Reset**: Press encoder to reset loop length to original recording.
+  - **Crop/Extend**: Rotate encoders to adjust loop start and loop end in real-time. 1 second of audio is captured before and after the original loop so you can extend either edge without silence.
+  - **Reset**: Press encoder to reset loop start/end crops to the original recording.
 - **Audio Processing**:
   - **Glitch-Free Looping**: Trapezoidal amplitude windowing to prevent clicks at loop points.
   - **Monitoring**: Smart monitoring that auto-mutes when loops are playing.
@@ -71,7 +71,7 @@ BlackHole 2ch + MacBook Speakers/headphones
 
 Then set macOS output to that Multi-Output Device, while Pd input stays set to **BlackHole 2ch**.
 
-The web controller has the basic hardware-style controls for both slots: record/play/stop/resume, clear, crop down/up, reset, and monitor toggle. It sends OSC directly to Pure Data on `127.0.0.1:9000`.
+The web controller has the basic hardware-style controls for both slots: record/play/stop/resume, clear, start crop down/up, end crop down/up, reset, and monitor toggle. It sends OSC directly to Pure Data on `127.0.0.1:9000`.
 
 ### Raspberry Pi / Patchbox OS
 
@@ -168,7 +168,7 @@ src/engine.pd
 looper_slot inlets:
   1. left audio signal
   2. right audio signal
-  3. control messages: rec, play, crop, reset, clear
+  3. control messages: rec, play, crop, cropStart, reset, clear
 
 looper_slot outlets:
   1. left loop signal
@@ -185,13 +185,16 @@ $1_data_R
 
 That means `[looper_slot slot1]` uses `slot1_data`/`slot1_data_R`, while `[looper_slot slot2]` uses `slot2_data`/`slot2_data_R`.
 
-Length handling inside `looper_slot.pd` has three separate memories:
+Each slot also keeps a 1 second input delay and writes delayed input into the slot array while recording. Recording stops 2 seconds after `rec 0`, which gives the slot 1 second of audio before the official start and 1 second after the official end.
+
+Length handling inside `looper_slot.pd` has four separate memories:
 
 - **Original length**: set from `[timer]` when recording stops.
-- **Current length**: updated by crop deltas and restored from original on reset.
-- **Playback length**: drives phasor speed, sample position, anti-click window, debug/state length output.
+- **Current end length**: updated by end crop deltas and restored from original on reset.
+- **Start crop offset**: updated by `cropStart` deltas and clipped to +/-1000ms.
+- **Playback length**: current end length minus start crop offset; drives phasor speed, sample position, anti-click window, debug/state length output.
 
-`rec 0`, `crop`, `reset`, and `clear` emit `/state slotX length ...`. `play` emits only `playing`/`paused` state.
+`rec 0`, `crop`, `cropStart`, `reset`, and `clear` emit `/state slotX length ...`. `cropStart` also emits `/state slotX start ...`. `play` emits only `playing`/`paused` state.
 
 To add another slot later, the expected Pd work is:
 
@@ -278,6 +281,8 @@ To add a new MIDI controller, copy `config/midi/example.json` and update the `ma
 - `slot2Button`
 - `slot1Encoder`
 - `slot2Encoder`
+- `slot1StartEncoder` (optional, for start crop)
+- `slot2StartEncoder` (optional, for start crop)
 - `slot1Reset`
 - `slot2Reset`
 - `monitorButton`
@@ -367,5 +372,4 @@ This means the Raspberry Pi does not see your USB MIDI controller.
 
 ## TODO
 
-- [ ] Pre-record/delay so the loop start can also be adjusted
 - [ ] Visual feedback of loop position in PD

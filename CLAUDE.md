@@ -54,7 +54,8 @@ engine.pd
 `looper_slot.pd` handles:
 - stereo recording into `$1_data` / `$1_data_R`
 - playback with `phasor~`, `tabread4~`, and sample-rate conversion
-- crop/extend length math
+- start/end crop and extend length math
+- 1 second pre-roll plus 1 second tail capture via delayed input recording
 - reset to original recorded length
 - clear/reset of playback gates, crop/current/original/playback length state, phasor position, and state output
 - `/state` message formatting for Node/tests
@@ -66,8 +67,9 @@ engine.pd
 
 Length state inside `looper_slot.pd` is intentionally split:
 - Original length: set by `[timer]` when recording stops; not changed by crop.
-- Current length: base length for cumulative crop math; updated by clipped crop output and restored from original on reset.
-- Playback length: drives phasor speed, sample index scaling, anti-click width, `PENDING_LENGTH`, and `/state slotX length ...`.
+- Current end length: base length for cumulative end crop math; updated by clipped crop output and restored from original on reset.
+- Start crop offset: adjusted by `/slotX cropStart <delta-ms>` and clipped to +/-1000ms.
+- Playback length: current end length minus start crop offset; drives phasor speed, sample index scaling, anti-click width, `PENDING_LENGTH`, and `/state slotX length ...`.
 
 State output contract:
 - `rec 1` emits `/state slotX recording`
@@ -75,6 +77,7 @@ State output contract:
 - `play 1` emits `/state slotX playing`
 - `play 0` emits `/state slotX paused`
 - `crop` emits `/state slotX length <ms>`
+- `cropStart` emits `/state slotX start <offset-ms>` and `/state slotX length <ms>`
 - `reset` emits `/state slotX length <original-ms>`
 - `clear` emits `/state slotX length 0` and `/state slotX stopped`
 
@@ -143,13 +146,14 @@ jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 256 -n 2
 jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 256 -n 3
 ```
 
-## Current State (as of 2026-05-11)
+## Current State (as of 2026-05-12)
 
 ### ✅ Working
 - **Slot 1 and slot 2 audio**: Recording, playback, stop/resume, clear
 - **Slot abstraction**: `looper_slot.pd` implements per-slot audio/state logic, instantiated by `engine.pd` for each slot
-- **Crop/extend**: Encoder adjusts loop length with debouncing and cumulative Pd length updates
-- **Reset**: Encoder press resets cropped length to original recording length
+- **End crop/extend**: Encoder adjusts loop end length with debouncing and cumulative Pd length updates
+- **Start crop/extend**: `/slotX cropStart <delta-ms>` adjusts loop start, with 1 second of pre-recorded audio available before the original start
+- **Reset**: Encoder press resets start/end crops to original recording boundaries
 - **Clear**: Pd handles `/slotX clear 1` directly, stops playback, clears length/crop state, and emits zero length/stopped state
 - **Anti-click envelope**: Trapezoidal windowing prevents loop point clicks
 - **Single monitor**: Toggle mutes when any loop is playing
@@ -161,7 +165,6 @@ jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 256 -n 3
 - None currently known for the slot extraction baseline
 
 ### 🔧 Partially Working
-- Pre-record buffer for adjusting loop START point (not implemented)
 - Visual feedback of loop position in Pd (not implemented)
 
 ## Important Quirks
@@ -233,9 +236,9 @@ const shouldMonitor = monitorEnabled && !anyPlaying;
 ```
 
 ### Crop Accumulation
-- Crop deltas are accumulated, not absolute values
-- Original length stored separately from current length
-- Reset clears crop offset back to 0 (both JS and Pd)
+- End crop and start crop deltas are accumulated, not absolute values
+- Original length is stored separately from current end length and start crop offset
+- Reset clears start/end crop offsets back to 0 (both JS and Pd)
 
 ---
 

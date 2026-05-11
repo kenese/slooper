@@ -108,7 +108,7 @@
 
         .readout {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 8px;
             margin-bottom: 12px;
             color: var(--muted);
@@ -245,8 +245,14 @@
         return 'Resume';
     }
 
+    function signed(value) {
+        return `${value >= 0 ? '+' : ''}${value}`;
+    }
+
     function renderSlot(slot) {
         const stateClass = slot.stateLabel.toLowerCase();
+        const startCrop = slot.startCropOffset || 0;
+        const endCrop = slot.endCropOffset ?? slot.cropOffset ?? 0;
         return `
             <article class="slot">
                 <div class="slot-head">
@@ -255,12 +261,15 @@
                 </div>
                 <div class="readout">
                     <div>Loop<strong>${slot.currentLengthMs} ms</strong></div>
-                    <div>Crop<strong>${slot.cropOffset >= 0 ? '+' : ''}${slot.cropOffset} ms</strong></div>
+                    <div>Start Crop<strong>${signed(startCrop)} ms</strong></div>
+                    <div>End Crop<strong>${signed(endCrop)} ms</strong></div>
                 </div>
                 <div class="controls">
                     <button class="primary" type="button" data-action="tap" data-slot="${slot.id}">${tapLabel(slot)}</button>
-                    <button type="button" data-action="cropDown" data-slot="${slot.id}">-30ms</button>
-                    <button type="button" data-action="cropUp" data-slot="${slot.id}">+30ms</button>
+                    <button type="button" data-action="cropStartDown" data-slot="${slot.id}">Start -30</button>
+                    <button type="button" data-action="cropStartUp" data-slot="${slot.id}">Start +30</button>
+                    <button type="button" data-action="cropDown" data-slot="${slot.id}">End -30</button>
+                    <button type="button" data-action="cropUp" data-slot="${slot.id}">End +30</button>
                     <button type="button" data-action="reset" data-slot="${slot.id}">Reset</button>
                     <button class="danger" type="button" data-action="clear" data-slot="${slot.id}">Clear</button>
                 </div>
