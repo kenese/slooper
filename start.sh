@@ -1,201 +1,225 @@
 #!/bin/bash
 
 # Slooper Startup Script
-# Quits Pd if running, opens engine.pd with DSP auto-on, and starts Node controller
+# Starts Pure Data and the selected Node controller without mutating tracked Pd patches.
+
+set -euo pipefail
 
 cd "$(dirname "$0")"
 
-
-
-# Define cleanup function
-cleanup() {
-    echo ""
-    echo "🧹 Cleaning up..."
-    
-    # Kill Node controllers
-    pkill -f "node src/index.js" 2>/dev/null
-    pkill -f "node src/dev_controller.js" 2>/dev/null
-    
-    # Force kill any Pd instances
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        killall "Pd-0.55-2" 2>/dev/null
-        killall Pd 2>/dev/null
-        killall pd 2>/dev/null
-        pkill -9 "Pd" 2>/dev/null
-    else
-        killall pd 2>/dev/null
-        pkill -9 pd 2>/dev/null
-        # Also stop JACK on Linux so USB audio can be safely unplugged
-        pkill jackd 2>/dev/null
-        pkill jackdbus 2>/dev/null
-    fi
-    
-    echo "✅ Stopped. Safe to unplug audio device."
-}
-
-# Trap EXIT signal (happens on ctrl+c or normal exit) to run cleanup
-trap cleanup EXIT
-
-# Parse arguments first (need to check for --stop early)
-AUDIO_DEVICE="XONE"
-MIDI_DEVICE="XONE"
+PID_DIR=".runtime/pids"
 RESTART_JACK=false
+STOP_JACK=false
 STOP_ONLY=false
+STATUS_ONLY=false
+FORCE_CLEANUP=false
+APPLIANCE_MODE=false
+PRINT_CONFIG=false
 
-for arg in "$@"
-do
-    case $arg in
-        device=*)
-        AUDIO_DEVICE="${arg#*=}"
-        ;;
-        audio-device=*)
-        AUDIO_DEVICE="${arg#*=}"
-        ;;
-        midi-device=*)
-        MIDI_DEVICE="${arg#*=}"
-        ;;
+for arg in "$@"; do
+    case "$arg" in
         --restart-jack)
-        RESTART_JACK=true
-        ;;
+            RESTART_JACK=true
+            ;;
+        --stop-jack)
+            STOP_JACK=true
+            ;;
         --stop)
-        STOP_ONLY=true
-        ;;
+            STOP_ONLY=true
+            ;;
+        --status)
+            STATUS_ONLY=true
+            ;;
+        --force-cleanup)
+            FORCE_CLEANUP=true
+            ;;
+        --appliance)
+            APPLIANCE_MODE=true
+            STOP_JACK=true
+            ;;
+        --print-config)
+            PRINT_CONFIG=true
+            ;;
     esac
 done
 
-# Handle --stop flag (just cleanup and exit)
-if [ "$STOP_ONLY" = true ]; then
-    echo "🛑 Stopping slooper..."
-    cleanup
-    trap - EXIT  # Remove trap since we already cleaned up
-    exit 0
-fi
+mkdir -p "$PID_DIR"
 
-echo "🔄 Stopping any running instances..."
-cleanup
-trap cleanup EXIT  # Re-enable trap after manual cleanup
+eval "$(node scripts/runtime_config.js --shell "$@")"
 
-sleep 1
+write_pid() {
+    local name="$1"
+    local pid="$2"
+    echo "$pid" > "$PID_DIR/$name.pid"
+}
 
-echo "🎛️  Configuring Audio for: $AUDIO_DEVICE"
+stop_pid() {
+    local name="$1"
+    local file="$PID_DIR/$name.pid"
 
-# Function to run sed compatibly
-run_sed() {
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' -e "$1" "$2"
-    else
-        sed -i -e "$1" "$2"
+    if [ ! -f "$file" ]; then
+        return
+    fi
+
+    local pid
+    pid="$(cat "$file")"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        echo "   Stopping $name ($pid)"
+        kill "$pid" 2>/dev/null || true
+        sleep 1
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    fi
+
+    rm -f "$file"
+}
+
+tracked_cleanup() {
+    echo "Cleaning up Slooper-managed processes..."
+    stop_pid "controller"
+    stop_pid "pd"
+    if [ "$STOP_JACK" = true ]; then
+        stop_pid "jack"
     fi
 }
 
-if [ "$AUDIO_DEVICE" == "Z1" ]; then
-    # Z1: adc 1 2, dac 3 4
-    run_sed 's/adc~ [0-9]* [0-9]*/adc~ 1 2/' src/engine.pd
-    run_sed 's/dac~ [0-9]* [0-9]*/dac~ 3 4/' src/engine.pd
-elif [ "$AUDIO_DEVICE" == "MAC" ] || [ "$AUDIO_DEVICE" == "BLACKHOLE" ]; then
-    # Mac dev: BlackHole 2ch input, built-in/headphone output
-    run_sed 's/adc~ [0-9]* [0-9]*/adc~ 1 2/' src/engine.pd
-    run_sed 's/dac~ [0-9]* [0-9]*/dac~ 1 2/' src/engine.pd
-elif [ "$AUDIO_DEVICE" == "XONE" ]; then
-    # XONE: adc 9 10, dac 1 2
-    run_sed 's/adc~ [0-9]* [0-9]*/adc~ 9 10/' src/engine.pd
-    run_sed 's/dac~ [0-9]* [0-9]*/dac~ 1 2/' src/engine.pd
-else
-    echo "⚠️ Unknown audio device: $AUDIO_DEVICE. Using current settings."
+force_cleanup() {
+    echo "Force cleanup requested. Stopping matching Pd, Node, and JACK processes..."
+    pkill -f "node src/index.js" 2>/dev/null || true
+    pkill -f "node src/dev_controller.js" 2>/dev/null || true
+    pkill -f "pd .*engine.pd" 2>/dev/null || true
+    pkill -f "Pd.*engine.pd" 2>/dev/null || true
+    pkill jackd 2>/dev/null || true
+    pkill jackdbus 2>/dev/null || true
+    rm -f "$PID_DIR"/*.pid
+}
+
+show_status() {
+    echo "Slooper status:"
+    for name in controller pd jack; do
+        local file="$PID_DIR/$name.pid"
+        if [ -f "$file" ]; then
+            local pid
+            pid="$(cat "$file")"
+            if kill -0 "$pid" 2>/dev/null; then
+                echo "   $name: running ($pid)"
+            else
+                echo "   $name: stale pid ($pid)"
+            fi
+        else
+            echo "   $name: not tracked"
+        fi
+    done
+}
+
+if [ "$PRINT_CONFIG" = true ]; then
+    node scripts/runtime_config.js --json "$@"
+    exit 0
 fi
 
-# On Linux (JACK), Pd ports are always logical 1/2 regardless of hardware channel
-if [[ "$OSTYPE" != "darwin"* ]]; then
-    run_sed 's/adc~ [0-9]* [0-9]*/adc~ 1 2/' src/engine.pd
-    run_sed 's/dac~ [0-9]* [0-9]*/dac~ 1 2/' src/engine.pd
+if [ "$STATUS_ONLY" = true ]; then
+    show_status
+    exit 0
 fi
 
+if [ "$FORCE_CLEANUP" = true ]; then
+    force_cleanup
+    if [ "$STOP_ONLY" = true ]; then
+        exit 0
+    fi
+elif [ "$STOP_ONLY" = true ]; then
+    tracked_cleanup
+    exit 0
+fi
 
-echo "🎛️  Opening Pure Data..."
+cleanup_on_exit() {
+    echo ""
+    tracked_cleanup
+    if [ "$APPLIANCE_MODE" = true ]; then
+        echo "Appliance mode cleanup complete. Safe to unplug audio device."
+    else
+        echo "Stopped Slooper-managed processes."
+    fi
+}
+
+trap cleanup_on_exit EXIT INT TERM
+
+echo "Stopping previously tracked Slooper processes..."
+tracked_cleanup
+
+echo "Configuring audio for: $AUDIO_DEVICE"
+if [ "$PD_GENERATE_RUNTIME_PATCH" = "1" ]; then
+    node scripts/runtime_config.js --ensure-runtime-patch "$@"
+fi
+
+echo "Pure Data patch: $PD_PATCH_PATH"
+
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    open src/engine.pd
+    echo "Opening Pure Data..."
+    open "$PD_PATCH_PATH"
 else
-    # Linux: Kill JACK if restart requested
     if [ "$RESTART_JACK" = true ]; then
-        echo "🔄 Restarting JACK (--restart-jack flag)..."
-        pkill -9 jackd 2>/dev/null
-        pkill -9 jackdbus 2>/dev/null
+        echo "Restarting JACK (--restart-jack flag)..."
+        pkill jackd 2>/dev/null || true
+        pkill jackdbus 2>/dev/null || true
+        rm -f "$PID_DIR/jack.pid"
         sleep 1
     fi
-    
-    # Linux: Start JACK if not running
+
     if ! pgrep -x jackd > /dev/null && ! pgrep -x jackdbus > /dev/null; then
-        echo "🔊 Starting JACK audio server..."
-        
-        # Auto-detect XONE:PX5 card number
-        XONE_CARD=$(aplay -l 2>/dev/null | grep -i "XONE" | head -1 | sed 's/card \([0-9]*\):.*/\1/')
-        
-        if [ -n "$XONE_CARD" ]; then
-            echo "   Found XONE:PX5 on card $XONE_CARD"
-            JACK_DEVICE="hw:$XONE_CARD"
+        echo "Starting JACK audio server..."
+
+        JACK_CARD="$(aplay -l 2>/dev/null | awk -v match="$JACK_CARD_NAME_INCLUDES" 'BEGIN { IGNORECASE=1 } $0 ~ match { sub(/^card /, "", $1); sub(/:$/, "", $1); print $1; exit }')"
+
+        if [ -n "$JACK_CARD" ]; then
+            echo "   Found $JACK_CARD_NAME_INCLUDES on card $JACK_CARD"
+            JACK_DEVICE="hw:$JACK_CARD"
         else
-            echo "   ⚠️  XONE not found, trying hw:3 (common USB position)"
+            echo "   Audio card matching '$JACK_CARD_NAME_INCLUDES' not found, trying hw:3"
             JACK_DEVICE="hw:3"
         fi
-        
-        # Start JACK with low-latency settings
-        # Buffer: 128 frames × 2 periods = ~5.3ms latency at 48kHz
-        # If you get xruns (audio glitches), increase to: -p 256 -n 2 (~10.7ms)
-        echo "   Latency target: ~5ms (128 frames × 2 periods @ 48kHz)"
-        jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 128 -n 2 &
+
+        echo "   Latency target: $JACK_PERIOD_SIZE frames x $JACK_PERIODS periods @ ${JACK_SAMPLE_RATE}Hz"
+        jackd -d alsa -d "$JACK_DEVICE" -r "$JACK_SAMPLE_RATE" -p "$JACK_PERIOD_SIZE" -n "$JACK_PERIODS" &
+        write_pid "jack" "$!"
         sleep 3
     else
-        echo "✅ JACK already running"
+        echo "JACK already running; Slooper will not stop it by default."
     fi
-    
-    # Linux/Patchbox: Run with JACK support, disable Pd MIDI to let Node.js use it
-    pd -nogui -jack -nomidi src/engine.pd &
-    
-    # Wait for Pd to start and register ports
-    echo "⏳ Waiting for Pure Data to register JACK ports..."
-    for i in {1..10}; do
+
+    pd -nogui -jack -nomidi "$PD_PATCH_PATH" &
+    write_pid "pd" "$!"
+
+    echo "Waiting for Pure Data to register JACK ports..."
+    for _ in {1..10}; do
         if jack_lsp 2>/dev/null | grep -q "pure_data"; then
-            echo "   ✅ Pure Data ports found!"
+            echo "   Pure Data ports found."
             break
         fi
         sleep 1
     done
-    
-    # Show available ports for debugging
-    echo ""
-    echo "📋 Available JACK ports:"
-    jack_lsp 2>/dev/null || echo "   (Could not list ports)"
-    echo ""
-    
-    # Auto-connect Pd to system audio
-    # XONE:PX5 uses channels 9-10 for main stereo input (same as Mac)
-    # Output goes to channels 1-2 (main stereo output)
-    echo "🔗 Connecting JACK audio ports..."
-    echo "   (Input: capture_9/10 → Pd, Output: Pd → playback_1/2)"
-    
-    # Disconnect any existing connections first
-    jack_disconnect system:capture_1 pure_data:input_1 2>/dev/null
-    jack_disconnect system:capture_2 pure_data:input_2 2>/dev/null
-    
-    # Connect the correct XONE channels
-    jack_connect system:capture_9 pure_data:input_1 && echo "   ✅ capture_9 → input_1" || echo "   ⚠️ capture_9 → input_1 (may already be connected)"
-    jack_connect system:capture_10 pure_data:input_2 && echo "   ✅ capture_10 → input_2" || echo "   ⚠️ capture_10 → input_2 (may already be connected)"
-    jack_connect pure_data:output_1 system:playback_1 && echo "   ✅ output_1 → playback_1" || echo "   ⚠️ output_1 → playback_1 (may already be connected)"
-    jack_connect pure_data:output_2 system:playback_2 && echo "   ✅ output_2 → playback_2" || echo "   ⚠️ output_2 → playback_2 (may already be connected)"
-    
-    echo ""
-    echo "🔍 Active JACK Connections:"
-    jack_lsp -c 2>/dev/null || echo "   (Could not list connections)"
-    echo ""
+
+    echo "Connecting JACK audio ports..."
+    echo "   Input: $JACK_CAPTURE_LEFT/$JACK_CAPTURE_RIGHT -> pure_data:input_1/2"
+    echo "   Output: pure_data:output_1/2 -> $JACK_PLAYBACK_LEFT/$JACK_PLAYBACK_RIGHT"
+
+    jack_connect "$JACK_CAPTURE_LEFT" pure_data:input_1 2>/dev/null || true
+    jack_connect "$JACK_CAPTURE_RIGHT" pure_data:input_2 2>/dev/null || true
+    jack_connect pure_data:output_1 "$JACK_PLAYBACK_LEFT" 2>/dev/null || true
+    jack_connect pure_data:output_2 "$JACK_PLAYBACK_RIGHT" 2>/dev/null || true
 fi
 
 sleep 3
 
-if [ "$MIDI_DEVICE" == "OSC" ] || [ "$MIDI_DEVICE" == "WEB" ]; then
-    echo "🚀 Starting OSC web controller..."
-    echo "🌐 Open http://127.0.0.1:3000"
-    node src/dev_controller.js
+if [ "$MIDI_DEVICE" = "OSC" ] || [ "$MIDI_DEVICE" = "WEB" ]; then
+    echo "Starting OSC web controller..."
+    echo "Open http://127.0.0.1:3000"
+    node src/dev_controller.js &
 else
-    echo "🚀 Starting Node MIDI controller..."
-    node src/index.js "$@"
+    echo "Starting Node MIDI controller..."
+    node src/index.js "$@" &
 fi
+
+write_pid "controller" "$!"
+wait "$(cat "$PID_DIR/controller.pid")"
