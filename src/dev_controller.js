@@ -71,6 +71,8 @@ async function handleAction(action, slotId) {
     else if (action === 'cropStartUp') await controller.cropStartSlot(slotId, runtimeConfig.controller.cropStepMs);
     else if (action === 'cropDown') await controller.cropSlot(slotId, -runtimeConfig.controller.cropStepMs);
     else if (action === 'cropUp') await controller.cropSlot(slotId, runtimeConfig.controller.cropStepMs);
+    else if (action === 'moveDown') await controller.moveSlot(slotId, -runtimeConfig.controller.cropStepMs);
+    else if (action === 'moveUp') await controller.moveSlot(slotId, runtimeConfig.controller.cropStepMs);
     else if (action === 'reset') await controller.resetSlot(slotId);
     else throw new Error(`Unknown action: ${action}`);
 }

@@ -246,7 +246,12 @@
     }
 
     function signed(value) {
-        return `${value >= 0 ? '+' : ''}${value}`;
+        const rounded = wholeMs(value);
+        return `${rounded >= 0 ? '+' : ''}${rounded}`;
+    }
+
+    function wholeMs(value) {
+        return Math.round(Number(value) || 0);
     }
 
     function renderSlot(slot) {
@@ -260,7 +265,7 @@
                     <div class="pill ${stateClass}">${stateNames[slot.state]}</div>
                 </div>
                 <div class="readout">
-                    <div>Loop<strong>${slot.currentLengthMs} ms</strong></div>
+                    <div>Loop<strong>${wholeMs(slot.currentLengthMs)} ms</strong></div>
                     <div>Start Crop<strong>${signed(startCrop)} ms</strong></div>
                     <div>End Crop<strong>${signed(endCrop)} ms</strong></div>
                 </div>
@@ -270,6 +275,8 @@
                     <button type="button" data-action="cropStartUp" data-slot="${slot.id}">Start +30</button>
                     <button type="button" data-action="cropDown" data-slot="${slot.id}">End -30</button>
                     <button type="button" data-action="cropUp" data-slot="${slot.id}">End +30</button>
+                    <button type="button" data-action="moveDown" data-slot="${slot.id}">Move -30</button>
+                    <button type="button" data-action="moveUp" data-slot="${slot.id}">Move +30</button>
                     <button type="button" data-action="reset" data-slot="${slot.id}">Reset</button>
                     <button class="danger" type="button" data-action="clear" data-slot="${slot.id}">Clear</button>
                 </div>
@@ -287,13 +294,13 @@
         document.getElementById('connection').textContent = 'OSC -> 127.0.0.1:9000';
     }
 
-    document.addEventListener('click', (event) => {
+    document.addEventListener('mousedown', (event) => {
         const button = event.target.closest('button[data-action]');
         if (!button) return;
         action(button.dataset.action, Number(button.dataset.slot));
     });
 
-    document.getElementById('monitor-button').addEventListener('click', () => action('monitor'));
+    document.getElementById('monitor-button').addEventListener('mousedown', () => action('monitor'));
 
     request('/api/state')
         .then((state) => {

@@ -119,6 +119,41 @@ test('current length accounts for start and end crop offsets', async () => {
     assert.equal(slot.currentLengthMs, 1210);
 });
 
+test('moveSlot shifts start and end crop together without changing length', async () => {
+    const transport = createFakeTransport();
+    const controller = createController({ transport });
+
+    controller.applyPdState(['slot1', 'length', 1000]);
+    controller.applyPdState(['slot1', 'playing']);
+
+    await controller.moveSlot(1, 30);
+
+    assert.deepEqual(transport.commands, [
+        ['/slot1', 'cropStart', 30],
+        ['/slot1', 'crop', 30],
+    ]);
+    const slot = controller.getState().slots[0];
+    assert.equal(slot.startCropOffset, 30);
+    assert.equal(slot.endCropOffset, 30);
+    assert.equal(slot.currentLengthMs, 1000);
+});
+
+test('moveSlot clips movement when the end boundary is already at its minimum', async () => {
+    const transport = createFakeTransport();
+    const controller = createController({ transport });
+
+    controller.applyPdState(['slot1', 'length', 1000]);
+    controller.applyPdState(['slot1', 'start', -900]);
+    controller.applyPdState(['slot1', 'playing']);
+
+    await controller.moveSlot(1, -30);
+
+    assert.deepEqual(transport.commands, []);
+    const slot = controller.getState().slots[0];
+    assert.equal(slot.startCropOffset, -900);
+    assert.equal(slot.currentLengthMs, 1000);
+});
+
 test('Pd-reported effective length is not double-counted with crop offsets', async () => {
     const transport = createFakeTransport();
     const controller = createController({ transport });

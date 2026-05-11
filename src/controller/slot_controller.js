@@ -195,6 +195,27 @@ class SlotController {
         this.emitChange();
     }
 
+    async moveSlot(id, delta) {
+        const slot = this.requireSlot(id);
+        if (slot.state !== SlotState.PLAYING || delta === 0) {
+            return;
+        }
+
+        const currentEndLength = slot.lengthMs + slot.startCropOffset;
+        const minDelta = Math.max(-1000 - slot.startCropOffset, 100 - currentEndLength);
+        const maxDelta = 1000 - slot.startCropOffset;
+        const clippedDelta = Math.max(minDelta, Math.min(maxDelta, delta));
+        if (clippedDelta === 0) {
+            return;
+        }
+
+        slot.startCropOffset += clippedDelta;
+        slot.cropOffset += clippedDelta;
+        await this.send(slotAddress(slot.id), 'cropStart', clippedDelta);
+        await this.send(slotAddress(slot.id), 'crop', clippedDelta);
+        this.emitChange();
+    }
+
     scheduleCrop(id, delta, onFlush) {
         const slot = this.requireSlot(id);
         if (slot.state !== SlotState.PLAYING || delta === 0) {
