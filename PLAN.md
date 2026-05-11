@@ -5,11 +5,48 @@ This plan addresses the current engineering, architecture, performance, develope
 ## Goals
 
 - Keep `src/engine.pd` and `src/looper_slot.pd` stable, reviewable, and safe for agents to work around.
+- Avoid functional Pd DSP changes during infrastructure cleanup unless a phase explicitly calls them out.
 - Make hardware/device behavior explicit instead of spread across docs, shell scripts, and controller code.
 - Reduce duplicate controller logic between MIDI mode and browser OSC mode.
 - Improve test reliability so changes can be verified without manual Pure Data console inspection.
 - Make Raspberry Pi installs lighter and startup/shutdown safer.
 - Keep project guidance useful for future human and agent contributors without stale contradictions.
+
+## Implementation Principles
+
+- Prefer small, independently testable changes over one large rewrite.
+- Add characterization tests before extracting shared controller behavior.
+- Keep `engine.pd` and `looper_slot.pd` edits rare, deliberate, and verified with `git diff`.
+- Treat Pd `/state` as the source of truth, but preserve responsive UI/LED feedback with explicit pending state where useful.
+- Keep all runtime/generated files under `.runtime/` and out of git.
+- Every implementation phase should end with a concrete command that proves the phase worked.
+
+## Phase 0: Baseline And Safety Net
+
+### Deliverables
+
+- Capture the current worktree state before implementation.
+- Add or document a quick baseline verification command for the current engine tests.
+- Confirm whether the starting point is expected to have dirty files.
+
+### Suggested Work
+
+- Run:
+
+```bash
+git status --short
+git diff -- src/engine.pd src/looper_slot.pd
+npm run test:engine
+```
+
+- If `npm run test:engine` cannot run because Pd is not already open, record that as the baseline and continue with the managed test runner phase later.
+- Before any Pd text edit, copy the target patch to `.runtime/backups/` or rely on git plus a focused `git diff -- src/*.pd` review.
+
+### Acceptance Checks
+
+- We know whether the worktree was dirty before implementation.
+- We know whether existing tests pass, fail, or require manual Pd startup.
+- No implementation phase starts by changing Pd files blindly.
 
 ## Current Issues
 
@@ -61,14 +98,21 @@ This plan addresses the current engineering, architecture, performance, develope
 
 - Replace `sed` edits to `src/engine.pd` with one of these approaches:
   - Preferred: make `engine.pd` use stable logical `adc~ 1 2` / `dac~ 1 2`, and handle hardware channel mapping outside Pd.
-  - Alternative: generate `.runtime/engine.pd` from a template and run Pd against the generated file.
+  - Alternative: generate `.runtime/engine.pd` from the tracked patch and run Pd against the generated file.
 - Add `.runtime/` to `.gitignore` if generation is used.
 - Ensure `./start.sh` no longer changes tracked files during normal startup.
 
 ### Suggested Work
 
 - On Linux/JACK, always keep Pd logical ports as `input_1/2` and `output_1/2`; select actual capture/playback ports through JACK config.
-- On macOS, prefer configuring device channels in Pd preferences or a separate Mac host patch rather than rewriting the main patch.
+- On macOS, prefer configuring device channels in Pd preferences when possible. If direct channel selection is still needed for XONE channel 9/10, use the `.runtime/engine.pd` generation path instead of mutating `src/engine.pd`.
+- Add a dry-run mode before changing startup behavior heavily:
+
+```bash
+./start.sh --print-config device=MAC midi-device=OSC
+./start.sh --print-config audio-device=XONE
+```
+
 - Add a guard command for agents:
 
 ```bash
@@ -82,6 +126,7 @@ This should remain clean after startup unless a developer intentionally edited p
 - `./start.sh device=MAC midi-device=OSC` does not modify tracked files.
 - `./start.sh audio-device=XONE` on Linux does not modify tracked files.
 - `git diff -- src/engine.pd` stays empty after startup and shutdown.
+- `./start.sh --print-config ...` shows the Pd patch path, Pd launch mode, MIDI profile, OSC ports, and JACK port mapping that would be used.
 
 ## Phase 2: Centralize Device And Runtime Config
 
@@ -138,11 +183,30 @@ src/config.js
 }
 ```
 
+### Implementation Notes
+
+- Avoid requiring `jq` on the Raspberry Pi. Either keep config as a CommonJS module or use a small Node helper that prints shell-safe values for `start.sh`.
+- Keep controller timing values in the same config source:
+
+```json
+{
+  "controller": {
+    "holdThresholdMs": 500,
+    "cropStepMs": 30,
+    "encoderThrottleMs": 50,
+    "playOnPress": false
+  }
+}
+```
+
+- Keep MIDI mappings declarative, but let `midi_adapter.js` own low-level easymidi quirks such as index-first opening on Linux.
+
 ### Acceptance Checks
 
 - Adding or changing a device mapping does not require editing controller logic.
 - `start.sh` reads config or delegates to a Node startup helper that reads config.
 - README, CLAUDE, and SKILLS no longer duplicate the full hardware mapping table.
+- Runtime logs no longer disagree with config values, especially hold threshold and encoder throttle.
 
 ## Phase 3: Safer Process Lifecycle
 
@@ -151,6 +215,7 @@ src/config.js
 - Replace broad process killing with tracked process cleanup.
 - Record child PIDs for Pd, JACK started by Slooper, and Node/web controller.
 - Only stop JACK automatically if Slooper started it, unless the user passes an explicit `--stop-jack` or `--force-cleanup` flag.
+- Keep the current broad cleanup behavior available only behind an explicit flag.
 
 ### Suggested Work
 
@@ -181,6 +246,7 @@ In appliance mode, broad cleanup can remain available and explicit.
 - Stopping Slooper does not kill unrelated Pd/JACK sessions by default.
 - `./start.sh --stop` cleans up Slooper-started processes.
 - `./start.sh --force-cleanup` keeps the current broad behavior for emergency use.
+- If JACK was already running before Slooper started, normal shutdown leaves it running.
 
 ## Phase 4: Extract Shared Controller Core
 
@@ -206,6 +272,7 @@ src/
 
 ### Suggested Work
 
+- Start with unit tests around the current behavior before moving code.
 - Replace numeric slot states with named constants:
 
 ```javascript
@@ -236,6 +303,27 @@ const SlotState = {
   - static HTML serving
   - JSON serialization
 
+### Suggested Shared Controller API
+
+```javascript
+const controller = createController({
+  slots: [1, 2],
+  transport,
+  config,
+  onStateChange,
+});
+
+await controller.tapSlot(1);
+await controller.clearSlot(1);
+await controller.cropSlot(1, -30);
+await controller.resetSlot(1);
+await controller.toggleMonitor();
+controller.applyPdState(['slot1', 'length', 512]);
+controller.applyPdState(['slot1', 'playing']);
+```
+
+The transport should be injectable so unit tests can assert OSC command sequences without running Pd.
+
 ### Acceptance Checks
 
 - A crop/reset/clear behavior change is made in one shared place.
@@ -254,6 +342,7 @@ const SlotState = {
 - Add a state-listening OSC server to the controller path, not just the test path.
 - Reconcile Node/web state from Pd `/state` messages.
 - Decide what Node is responsible for versus what Pd is responsible for.
+- Avoid two processes trying to bind OSC state port `9001` at the same time.
 
 ### Recommended Contract
 
@@ -276,12 +365,14 @@ const SlotState = {
 - Update slot state from `/state slotX recording|playing|paused|stopped`.
 - Keep a transient "pending action" if needed for responsive LED/UI feedback.
 - Consider adding a `/state slotX empty` or `/state slotX cleared` message only if the current `stopped + length 0` contract becomes ambiguous.
+- Let tests use an alternate state port via config or ensure the managed test runner is the only process listening during engine tests.
 
 ### Acceptance Checks
 
 - Browser UI shows Pd-reported loop length, not a `Date.now()` estimate.
 - MIDI LED behavior recovers if Pd emits a state that differs from the assumed Node state.
 - Tests can validate controller state by sending fake or real `/state` messages.
+- Starting the web controller while tests are running fails clearly or uses distinct configured ports.
 
 ## Phase 6: Improve Test Automation
 
@@ -306,6 +397,15 @@ const SlotState = {
   }
 }
 ```
+
+### Test Strategy Tweaks
+
+- Split tests into three layers:
+  - Unit tests for shared controller behavior with fake transport.
+  - OSC contract tests for command/state message formatting.
+  - Managed engine integration tests that require Pd.
+- Keep the default `npm test` fast enough for local iteration. If managed Pd startup is slow or platform-specific, expose it as `npm run test:engine:managed` and document when to use it.
+- Ensure every engine integration test begins by clearing both slots so tests do not inherit Pd state from a previous test.
 
 ### Engine Test Improvements
 
@@ -337,6 +437,7 @@ const SlotState = {
 - `npm test` has no tests that pass only because "no exception was thrown" unless that is explicitly the behavior under test.
 - A clean checkout can run a documented test command on Mac dev mode.
 - Known regressions from CLAUDE are represented by named tests.
+- Unit tests can run without Pd, MIDI hardware, JACK, or audio devices.
 
 ## Phase 7: Performance And Pi Footprint
 
@@ -367,6 +468,11 @@ npm uninstall puppeteer puppeteer-extra puppeteer-extra-plugin-stealth
   - sample rate
   - maximum recording/extension length
   - crop upper bound
+
+### Additional Checks
+
+- Update both `package.json` and `package-lock.json` when dependencies move or are removed.
+- If Pd debug `print` objects remain, document that they are intentional and harmless; otherwise gate or remove the noisy ones in a focused Pd patch review.
 
 ### Acceptance Checks
 
@@ -414,6 +520,12 @@ npm uninstall puppeteer puppeteer-extra puppeteer-extra-plugin-stealth
 
 Only delete helper files after confirming they are not used by an active workflow.
 
+### Recommended First Pass
+
+- Move helper scripts before deleting anything.
+- Add compatibility notes or wrapper scripts if docs still reference the old root paths.
+- Delay deletion of Pd helper patches until after engine tests and docs are updated, because they may encode useful message-format experiments.
+
 ### Acceptance Checks
 
 - `npm run` shows the common project workflows.
@@ -443,6 +555,7 @@ CLAUDE.md       # optional compatibility copy or remove after AGENTS.md exists
 - Align Node version guidance.
 - Align `CONFIG.throttleMs` docs with code.
 - Align hold threshold wording: docs say 500ms, runtime log says "Hold 1s".
+- Rename or remove duplicate guidance between `CLAUDE.md` and `AGENTS.md`; if both stay, identify one as generated/compatibility copy.
 - Keep Pd editing warnings, especially:
   - Pure Data object indices are fragile.
   - Escaped commas in saved `expr` objects.
@@ -461,6 +574,7 @@ CLAUDE.md       # optional compatibility copy or remove after AGENTS.md exists
   - safe Pd editing rules
   - prohibited destructive operations
 - Docs do not contain stale implementation claims contradicted by code.
+- `rg "throttleMs|Hold 1s|adc~ 9 10|git checkout HEAD --"` either finds no stale guidance or finds intentional, contextual references.
 
 ## Phase 10: Optional Product Improvements
 
@@ -477,15 +591,28 @@ These are not blockers for the engineering cleanup, but they are natural next fe
 
 ## Recommended Execution Order
 
-1. Stop mutating `src/engine.pd` at startup.
-2. Centralize device config and fix Linux `audio-device` JACK routing.
-3. Make process lifecycle cleanup safer.
-4. Extract shared controller core.
-5. Make Pd `/state` authoritative in Node/web state.
-6. Upgrade tests and add a managed engine test runner.
-7. Remove unused dependencies and reduce Pi runtime noise.
-8. Clean npm scripts, Node version, helper files, and repo layout.
-9. Refresh README/AGENTS/SKILLS/CLAUDE so future agents get accurate guidance.
+1. Baseline current behavior and worktree state.
+2. Stop mutating `src/engine.pd` at startup.
+3. Centralize device config and fix Linux `audio-device` JACK routing.
+4. Make process lifecycle cleanup safer.
+5. Add controller unit tests, then extract shared controller core.
+6. Make Pd `/state` authoritative in Node/web state.
+7. Upgrade tests and add a managed engine test runner.
+8. Remove unused dependencies and reduce Pi runtime noise.
+9. Clean npm scripts, Node version, helper files, and repo layout.
+10. Refresh README/AGENTS/SKILLS/CLAUDE so future agents get accurate guidance.
+
+## Suggested Implementation Slices
+
+These slices are safer than implementing the plan strictly phase-by-phase as one long branch:
+
+1. **Startup safety slice:** Phase 0, Phase 1, and the minimal config needed to stop Pd source mutation.
+2. **Runtime config and lifecycle slice:** Phase 2 and Phase 3.
+3. **Controller core slice:** Phase 4, with unit tests first.
+4. **Authoritative state and tests slice:** Phase 5 and Phase 6.
+5. **Cleanup slice:** Phase 7, Phase 8, and Phase 9.
+
+Each slice should leave the project runnable before moving to the next.
 
 ## Definition Of Done
 
