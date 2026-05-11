@@ -12,7 +12,7 @@ Currently hardcoded to support the following but should work with any usb midi d
 - **Loop Management**:
   - **Record/Play**: Seamless recording and playback states.
   - **Clear**: Hold button for 500ms to clear a slot.
-  - **Crop/Extend**: Rotate encoder to adjust loop length in real-time. 500ms of audio is recorded after your loop so you can both reduce and extend loop length
+  - **Crop/Extend**: Rotate encoder to adjust loop length in real-time. 1 second of audio is recorded after your loop so you can both reduce and extend loop length
   - **Reset**: Press encoder to reset loop length to original recording.
 - **Audio Processing**:
   - **Glitch-Free Looping**: Trapezoidal amplitude windowing to prevent clicks at loop points.

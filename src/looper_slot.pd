@@ -86,6 +86,8 @@
 #X text 854 539 Inital load sets samplerate;
 #X text 673 495 PLAY SIGNAL LENGTH;
 #X text 346 233 clearing all state;
+#X msg 286 268 stop;
+#X obj 250 300 del 1000;
 #X connect 0 0 61 0;
 #X connect 1 0 76 0;
 #X connect 4 0 35 0;
@@ -94,9 +96,10 @@
 #X connect 7 1 65 0;
 #X connect 7 1 8 0;
 #X connect 8 0 10 1;
-#X connect 8 1 12 0;
+#X connect 8 1 86 0;
 #X connect 9 0 70 0;
 #X connect 9 0 11 0;
+#X connect 9 0 85 0;
 #X connect 9 1 10 0;
 #X connect 10 0 14 0;
 #X connect 10 0 72 0;
@@ -171,3 +174,5 @@
 #X connect 81 0 14 1;
 #X connect 81 0 16 1;
 #X connect 81 0 69 0;
+#X connect 85 0 86 0;
+#X connect 86 0 12 0;
