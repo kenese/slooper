@@ -1,0 +1,13 @@
+{
+  "name": "Example MIDI Controller",
+  "match": "Example",
+  "controls": {
+    "slot1Button": { "type": "note", "note": 36, "channel": 0 },
+    "slot2Button": { "type": "note", "note": 37, "channel": 0 },
+    "slot1Encoder": { "type": "cc", "controller": 16, "channel": 0, "mode": "relative-64" },
+    "slot2Encoder": { "type": "cc", "controller": 17, "channel": 0, "mode": "relative-64" },
+    "slot1Reset": { "type": "note", "note": 38, "channel": 0 },
+    "slot2Reset": { "type": "note", "note": 39, "channel": 0 },
+    "monitorButton": { "type": "note", "note": 40, "channel": 0 }
+  }
+}

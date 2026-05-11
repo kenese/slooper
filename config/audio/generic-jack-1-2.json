@@ -1,0 +1,16 @@
+{
+  "name": "Generic JACK 1/2",
+  "mode": "jack",
+  "jack": {
+    "cardNameIncludes": "",
+    "sampleRate": 48000,
+    "periodSize": 128,
+    "periods": 2,
+    "capturePorts": ["system:capture_1", "system:capture_2"],
+    "playbackPorts": ["system:playback_1", "system:playback_2"]
+  },
+  "pd": {
+    "darwin": { "adc": [1, 2], "dac": [1, 2] },
+    "linux": { "adc": [1, 2], "dac": [1, 2] }
+  }
+}

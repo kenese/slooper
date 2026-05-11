@@ -204,7 +204,34 @@ To add another slot later, the expected Pd work is:
 
 ### Configuration
 
-You can customize the hardware setup using command-line arguments:
+Slooper's hardware setup is configured with JSON files. MIDI mappings and audio routing are separate so you can mix any supported controller with any supported soundcard.
+
+Bundled configs live in:
+
+```text
+config/
+  audio/
+    xone-px5.json
+    traktor-z1.json
+    blackhole-mac.json
+    generic-jack-1-2.json
+  midi/
+    xone-px5.json
+    traktor-x1mk3.json
+    osc.json
+    web.json
+    example.json
+```
+
+Use explicit config files:
+
+```bash
+./start.sh --midi-config=config/midi/xone-px5.json --audio-config=config/audio/xone-px5.json
+./start.sh --midi-config=config/midi/traktor-x1mk3.json --audio-config=config/audio/traktor-z1.json
+./start.sh --midi-config=config/midi/example.json --audio-config=config/audio/generic-jack-1-2.json
+```
+
+The older aliases still work and resolve to the bundled JSON files:
 
 **Select MIDI Device:**
 ```bash
@@ -236,6 +263,7 @@ Inspect the resolved runtime config without starting anything:
 
 ```bash
 ./start.sh --print-config device=MAC midi-device=OSC
+./start.sh --print-config --midi-config=config/midi/example.json --audio-config=config/audio/generic-jack-1-2.json
 ```
 
 **Combine Arguments:**
@@ -243,6 +271,24 @@ Inspect the resolved runtime config without starting anything:
 ./start.sh midi-device=X1MK3 audio-device=Z1
 ./start.sh device=MAC midi-device=OSC
 ```
+
+To add a new MIDI controller, copy `config/midi/example.json` and update the `match` string plus note/CC values. The first pass supports note buttons and `relative-64` CC encoders for the existing two-slot control surface:
+
+- `slot1Button`
+- `slot2Button`
+- `slot1Encoder`
+- `slot2Encoder`
+- `slot1Reset`
+- `slot2Reset`
+- `monitorButton`
+
+Use the MIDI logger to discover values:
+
+```bash
+npm run midi:log
+```
+
+To add a new class-compliant audio interface, copy `config/audio/generic-jack-1-2.json`. On Linux/Pi with JACK, keep Pd on logical `adc~ 1 2` and `dac~ 1 2`; set `jack.capturePorts` and `jack.playbackPorts` to map the hardware channels. On macOS/native Pd, use the `pd.darwin.adc` and `pd.darwin.dac` arrays for direct channel selection in the generated runtime patch.
 
 **Play Mode (Resume Behavior):**
 

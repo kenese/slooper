@@ -1,0 +1,16 @@
+{
+  "name": "Traktor Kontrol Z1",
+  "mode": "jack",
+  "jack": {
+    "cardNameIncludes": "Traktor Z1",
+    "sampleRate": 48000,
+    "periodSize": 128,
+    "periods": 2,
+    "capturePorts": ["system:capture_1", "system:capture_2"],
+    "playbackPorts": ["system:playback_3", "system:playback_4"]
+  },
+  "pd": {
+    "darwin": { "adc": [1, 2], "dac": [3, 4] },
+    "linux": { "adc": [1, 2], "dac": [1, 2] }
+  }
+}

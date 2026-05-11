@@ -7,6 +7,8 @@ const { OscTransport } = require('./controller/osc_transport');
 const args = process.argv.slice(2);
 const midiArg = args.find((arg) => arg.startsWith('midi-device='));
 const audioArg = args.find((arg) => arg.startsWith('audio-device=') || arg.startsWith('device='));
+const midiConfigArg = args.find((arg) => arg.startsWith('--midi-config='));
+const audioConfigArg = args.find((arg) => arg.startsWith('--audio-config='));
 const midiDeviceName = midiArg ? midiArg.split('=')[1] : 'XONE';
 const audioDeviceName = audioArg ? audioArg.split('=')[1] : 'XONE';
 const playOnPress = args.includes('play-on-press');
@@ -14,6 +16,8 @@ const playOnPress = args.includes('play-on-press');
 const runtimeConfig = getRuntimeConfig({
     audioDevice: audioDeviceName,
     midiDevice: midiDeviceName,
+    audioConfigPath: audioConfigArg ? audioConfigArg.split('=')[1] : undefined,
+    midiConfigPath: midiConfigArg ? midiConfigArg.split('=')[1] : undefined,
 });
 
 runtimeConfig.controller.playOnPress = playOnPress;
@@ -55,7 +59,7 @@ async function openMidiInput() {
         }
 
         try {
-            const shortName = inputs.find((name) => name.includes('XONE'));
+            const shortName = inputs.find((name) => name.toLowerCase().includes(midi.midiName.toLowerCase()));
             if (shortName) {
                 console.log(`   Attempt ${attempt}: Opening "${shortName}"...`);
                 return new easymidi.Input(shortName);
@@ -217,8 +221,8 @@ function setupMidiHandlers(input, output) {
 
     input.on('cc', (msg) => {
         let slotId = null;
-        if (msg.controller === midi.slot1.encoderCC) slotId = 1;
-        else if (msg.controller === midi.slot2.encoderCC) slotId = 2;
+        if (msg.controller === midi.slot1.encoderCC && msg.channel === (midi.slot1.encoderChannel ?? midi.slot1.channel)) slotId = 1;
+        else if (msg.controller === midi.slot2.encoderCC && msg.channel === (midi.slot2.encoderChannel ?? midi.slot2.channel)) slotId = 2;
         if (slotId) handleEncoder(slotId, msg.value);
     });
 

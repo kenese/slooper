@@ -3,6 +3,20 @@ const path = require('path');
 
 const DEFAULT_PROJECT_ROOT = path.resolve(__dirname, '..');
 
+const AUDIO_ALIASES = {
+    XONE: 'config/audio/xone-px5.json',
+    Z1: 'config/audio/traktor-z1.json',
+    MAC: 'config/audio/blackhole-mac.json',
+    BLACKHOLE: 'config/audio/blackhole-mac.json',
+};
+
+const MIDI_ALIASES = {
+    XONE: 'config/midi/xone-px5.json',
+    X1MK3: 'config/midi/traktor-x1mk3.json',
+    OSC: 'config/midi/osc.json',
+    WEB: 'config/midi/web.json',
+};
+
 const BASE_CONFIG = {
     osc: {
         host: '127.0.0.1',
@@ -20,80 +34,6 @@ const BASE_CONFIG = {
         periodSize: 128,
         periods: 2,
     },
-    audioDevices: {
-        XONE: {
-            jackCardNameIncludes: 'XONE',
-            capturePorts: ['system:capture_9', 'system:capture_10'],
-            playbackPorts: ['system:playback_1', 'system:playback_2'],
-            macPdChannels: {
-                adc: [9, 10],
-                dac: [1, 2],
-            },
-            linuxPdChannels: {
-                adc: [1, 2],
-                dac: [1, 2],
-            },
-        },
-        Z1: {
-            jackCardNameIncludes: 'Traktor Z1',
-            capturePorts: ['system:capture_1', 'system:capture_2'],
-            playbackPorts: ['system:playback_3', 'system:playback_4'],
-            macPdChannels: {
-                adc: [1, 2],
-                dac: [3, 4],
-            },
-            linuxPdChannels: {
-                adc: [1, 2],
-                dac: [1, 2],
-            },
-        },
-        MAC: {
-            mode: 'native-pd',
-            macPdChannels: {
-                adc: [1, 2],
-                dac: [1, 2],
-            },
-            linuxPdChannels: {
-                adc: [1, 2],
-                dac: [1, 2],
-            },
-        },
-        BLACKHOLE: {
-            mode: 'native-pd',
-            macPdChannels: {
-                adc: [1, 2],
-                dac: [1, 2],
-            },
-            linuxPdChannels: {
-                adc: [1, 2],
-                dac: [1, 2],
-            },
-        },
-    },
-    midiDevices: {
-        XONE: {
-            midiName: 'XONE',
-            slot1: { note: 14, channel: 15, encoderCC: 7 },
-            slot2: { note: 15, channel: 15, encoderCC: 7 },
-            monitor: { note: 10, channel: 15 },
-            encoderPress1: { note: 28, channel: 15 },
-            encoderPress2: { note: 38, channel: 15 },
-        },
-        X1MK3: {
-            midiName: 'TRAKTOR X1MK3',
-            slot1: { note: 10, channel: 0, encoderCC: 20 },
-            slot2: { note: 10, channel: 1, encoderCC: 21 },
-            monitor: { note: 11, channel: 0 },
-            encoderPress1: { note: 20, channel: 0 },
-            encoderPress2: { note: 21, channel: 0 },
-        },
-        OSC: {
-            midiName: 'OSC',
-        },
-        WEB: {
-            midiName: 'WEB',
-        },
-    },
 };
 
 function clone(value) {
@@ -104,21 +44,206 @@ function normalizePlatform(platform = process.platform) {
     return platform === 'darwin' ? 'darwin' : 'linux';
 }
 
-function getAudioDevice(name = 'XONE') {
-    return BASE_CONFIG.audioDevices[name] || BASE_CONFIG.audioDevices.XONE;
+function resolveConfigPath(projectRoot, configPath) {
+    if (path.isAbsolute(configPath)) {
+        return configPath;
+    }
+    return path.join(projectRoot, configPath);
 }
 
-function getMidiDevice(name = 'XONE') {
-    return BASE_CONFIG.midiDevices[name] || BASE_CONFIG.midiDevices.XONE;
+function loadJsonFile(filePath) {
+    try {
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            throw new Error(`Config file not found: ${filePath}`);
+        }
+        throw new Error(`Could not read config file ${filePath}: ${err.message}`);
+    }
+}
+
+function getAliasPath(aliases, name, label) {
+    if (!aliases[name]) {
+        throw new Error(`Unknown ${label} alias: ${name}`);
+    }
+    return aliases[name];
+}
+
+function getAudioConfigPath(projectRoot, options) {
+    if (options.audioConfigPath) {
+        return resolveConfigPath(projectRoot, options.audioConfigPath);
+    }
+    const audioDeviceName = options.audioDevice || 'XONE';
+    return resolveConfigPath(DEFAULT_PROJECT_ROOT, getAliasPath(AUDIO_ALIASES, audioDeviceName, 'audio device'));
+}
+
+function getMidiConfigPath(projectRoot, options) {
+    if (options.midiConfigPath) {
+        return resolveConfigPath(projectRoot, options.midiConfigPath);
+    }
+    const midiDeviceName = options.midiDevice || 'XONE';
+    return resolveConfigPath(DEFAULT_PROJECT_ROOT, getAliasPath(MIDI_ALIASES, midiDeviceName, 'MIDI device'));
+}
+
+function isPair(value) {
+    return Array.isArray(value) && value.length === 2;
+}
+
+function validateAudioConfig(raw) {
+    if (!raw.name) {
+        throw new Error('Missing audio config name');
+    }
+
+    const mode = raw.mode || 'jack';
+    if (!['jack', 'native-pd'].includes(mode)) {
+        throw new Error(`Unsupported audio mode: ${mode}`);
+    }
+
+    if (!raw.pd || !raw.pd.darwin || !raw.pd.linux) {
+        throw new Error('Missing Pd channel config for darwin and linux');
+    }
+
+    for (const platform of ['darwin', 'linux']) {
+        if (!isPair(raw.pd[platform].adc)) {
+            throw new Error(`Missing Pd ${platform} adc channel pair`);
+        }
+        if (!isPair(raw.pd[platform].dac)) {
+            throw new Error(`Missing Pd ${platform} dac channel pair`);
+        }
+    }
+
+    if (mode === 'jack') {
+        if (!raw.jack) {
+            throw new Error('Missing JACK config');
+        }
+        if (!isPair(raw.jack.capturePorts)) {
+            throw new Error('Missing JACK capturePorts');
+        }
+        if (!isPair(raw.jack.playbackPorts)) {
+            throw new Error('Missing JACK playbackPorts');
+        }
+    }
+}
+
+function normalizeAudioConfig(raw) {
+    validateAudioConfig(raw);
+
+    const jack = raw.jack || {};
+    const pd = raw.pd || {};
+
+    return {
+        name: raw.name,
+        mode: raw.mode || 'jack',
+        jackCardNameIncludes: jack.cardNameIncludes || '',
+        capturePorts: jack.capturePorts || [],
+        playbackPorts: jack.playbackPorts || [],
+        macPdChannels: pd.darwin || { adc: [1, 2], dac: [1, 2] },
+        linuxPdChannels: pd.linux || { adc: [1, 2], dac: [1, 2] },
+        jack: {
+            sampleRate: jack.sampleRate,
+            periodSize: jack.periodSize,
+            periods: jack.periods,
+        },
+    };
+}
+
+function requireMidiControl(controls, name, type) {
+    const control = controls[name];
+    if (!control) {
+        throw new Error(`Missing MIDI control: ${name}`);
+    }
+    if (control.type !== type) {
+        throw new Error(`MIDI control ${name} must be type ${type}`);
+    }
+    if (typeof control.channel !== 'number') {
+        throw new Error(`MIDI control ${name} must include numeric channel`);
+    }
+    if (type === 'note' && typeof control.note !== 'number') {
+        throw new Error(`MIDI control ${name} must include numeric note`);
+    }
+    if (type === 'cc' && typeof control.controller !== 'number') {
+        throw new Error(`MIDI control ${name} must include numeric controller`);
+    }
+    if (type === 'cc' && control.mode !== 'relative-64') {
+        throw new Error(`MIDI control ${name} uses unsupported encoder mode: ${control.mode}`);
+    }
+    return control;
+}
+
+function validateMidiConfig(raw) {
+    if (!raw.name) {
+        throw new Error('Missing MIDI config name');
+    }
+    if (!raw.match) {
+        throw new Error('Missing MIDI match string');
+    }
+    if (raw.mode === 'virtual') {
+        return;
+    }
+
+    const controls = raw.controls || {};
+    requireMidiControl(controls, 'slot1Button', 'note');
+    requireMidiControl(controls, 'slot2Button', 'note');
+    requireMidiControl(controls, 'slot1Encoder', 'cc');
+    requireMidiControl(controls, 'slot2Encoder', 'cc');
+    requireMidiControl(controls, 'slot1Reset', 'note');
+    requireMidiControl(controls, 'slot2Reset', 'note');
+    requireMidiControl(controls, 'monitorButton', 'note');
+}
+
+function normalizeMidiConfig(raw) {
+    validateMidiConfig(raw);
+
+    if (raw.mode === 'virtual') {
+        return {
+            name: raw.name,
+            midiName: raw.match,
+            mode: raw.mode,
+        };
+    }
+
+    const controls = raw.controls || {};
+
+    return {
+        name: raw.name,
+        midiName: raw.match,
+        controls,
+        slot1: {
+            note: controls.slot1Button.note,
+            channel: controls.slot1Button.channel,
+            encoderCC: controls.slot1Encoder.controller,
+            encoderChannel: controls.slot1Encoder.channel,
+            encoderMode: controls.slot1Encoder.mode,
+        },
+        slot2: {
+            note: controls.slot2Button.note,
+            channel: controls.slot2Button.channel,
+            encoderCC: controls.slot2Encoder.controller,
+            encoderChannel: controls.slot2Encoder.channel,
+            encoderMode: controls.slot2Encoder.mode,
+        },
+        monitor: {
+            note: controls.monitorButton.note,
+            channel: controls.monitorButton.channel,
+        },
+        encoderPress1: {
+            note: controls.slot1Reset.note,
+            channel: controls.slot1Reset.channel,
+        },
+        encoderPress2: {
+            note: controls.slot2Reset.note,
+            channel: controls.slot2Reset.channel,
+        },
+    };
 }
 
 function getRuntimeConfig(options = {}) {
     const projectRoot = options.projectRoot || DEFAULT_PROJECT_ROOT;
     const platform = normalizePlatform(options.platform);
-    const audioDeviceName = options.audioDevice || 'XONE';
-    const midiDeviceName = options.midiDevice || 'XONE';
-    const audio = clone(getAudioDevice(audioDeviceName));
-    const midi = clone(getMidiDevice(midiDeviceName));
+    const audioConfigPath = getAudioConfigPath(projectRoot, options);
+    const midiConfigPath = getMidiConfigPath(projectRoot, options);
+    const audio = normalizeAudioConfig(loadJsonFile(audioConfigPath));
+    const midi = normalizeMidiConfig(loadJsonFile(midiConfigPath));
     const sourcePatchPath = path.join(projectRoot, 'src', 'engine.pd');
     const runtimePatchPath = path.join(projectRoot, '.runtime', 'engine.pd');
     const pdChannels = platform === 'darwin' ? audio.macPdChannels : audio.linuxPdChannels;
@@ -127,11 +252,16 @@ function getRuntimeConfig(options = {}) {
     return {
         projectRoot,
         platform,
-        audioDeviceName,
-        midiDeviceName,
+        audioDeviceName: options.audioConfigPath ? audio.name : (options.audioDevice || 'XONE'),
+        midiDeviceName: options.midiConfigPath ? midi.name : (options.midiDevice || 'XONE'),
+        audioConfigPath,
+        midiConfigPath,
         osc: clone(BASE_CONFIG.osc),
         controller: clone(BASE_CONFIG.controller),
-        jack: clone(BASE_CONFIG.jack),
+        jack: {
+            ...clone(BASE_CONFIG.jack),
+            ...Object.fromEntries(Object.entries(audio.jack).filter(([, value]) => value !== undefined)),
+        },
         audio,
         midi,
         pd: {

@@ -1,0 +1,16 @@
+{
+  "name": "Allen & Heath XONE:PX5",
+  "mode": "jack",
+  "jack": {
+    "cardNameIncludes": "XONE",
+    "sampleRate": 48000,
+    "periodSize": 128,
+    "periods": 2,
+    "capturePorts": ["system:capture_9", "system:capture_10"],
+    "playbackPorts": ["system:playback_1", "system:playback_2"]
+  },
+  "pd": {
+    "darwin": { "adc": [9, 10], "dac": [1, 2] },
+    "linux": { "adc": [1, 2], "dac": [1, 2] }
+  }
+}

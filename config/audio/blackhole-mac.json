@@ -1,0 +1,8 @@
+{
+  "name": "BlackHole / Mac Native Pd",
+  "mode": "native-pd",
+  "pd": {
+    "darwin": { "adc": [1, 2], "dac": [1, 2] },
+    "linux": { "adc": [1, 2], "dac": [1, 2] }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "Native Instruments Traktor X1 MK3",
+  "match": "TRAKTOR X1MK3",
+  "controls": {
+    "slot1Button": { "type": "note", "note": 10, "channel": 0 },
+    "slot2Button": { "type": "note", "note": 10, "channel": 1 },
+    "slot1Encoder": { "type": "cc", "controller": 20, "channel": 0, "mode": "relative-64" },
+    "slot2Encoder": { "type": "cc", "controller": 21, "channel": 1, "mode": "relative-64" },
+    "slot1Reset": { "type": "note", "note": 20, "channel": 0 },
+    "slot2Reset": { "type": "note", "note": 21, "channel": 0 },
+    "monitorButton": { "type": "note", "note": 11, "channel": 0 }
+  }
+}
