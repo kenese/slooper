@@ -41,6 +41,38 @@ Currently hardcoded to support the following but should work with any usb midi d
    npm install
    ```
 
+### Mac Dev Mode
+
+Mac dev mode uses BlackHole for audio input and a small browser controller for OSC, so you can work without the PX5 or a MIDI controller connected.
+
+1. In **Audio MIDI Setup**, make sure **BlackHole 2ch** is installed and running at **48kHz**.
+2. Route the audio you want to loop into **BlackHole 2ch**:
+   - Simple setup: open **System Settings > Sound > Output** and select **BlackHole 2ch**.
+   - Play audio from Spotify, a browser, Ableton, or any other app. That app's audio now goes into BlackHole.
+3. In Pure Data audio settings, use:
+   - Input: **BlackHole 2ch**
+   - Output: **MacBook speakers**, headphones, or your normal output device
+4. Start Slooper in Mac dev mode:
+   ```bash
+   ./start.sh device=MAC midi-device=OSC
+   ```
+5. Open the browser controller:
+   ```text
+   http://127.0.0.1:3000
+   ```
+
+With the simple setup, you will not hear the original source directly because system output is BlackHole. You hear it through Pd/Slooper instead. Use the web controller's **Monitor** button to hear input when no loop is playing.
+
+If you want to hear the original app directly and also send it into Slooper, create a **Multi-Output Device** in **Audio MIDI Setup** with:
+
+```text
+BlackHole 2ch + MacBook Speakers/headphones
+```
+
+Then set macOS output to that Multi-Output Device, while Pd input stays set to **BlackHole 2ch**.
+
+The web controller has the basic hardware-style controls for both slots: record/play/stop/resume, clear, crop down/up, reset, and monitor toggle. It sends OSC directly to Pure Data on `127.0.0.1:9000`.
+
 ### Raspberry Pi / Patchbox OS
 
 If you are running this on a Raspberry Pi using Patchbox OS, you will need to install the ALSA development library for the MIDI integration to work.
@@ -97,6 +129,9 @@ You can customize the hardware setup using command-line arguments:
 
 # Traktor X1 MK3
 ./start.sh midi-device=X1MK3
+
+# Browser OSC controller for Mac dev
+./start.sh midi-device=OSC
 ```
 
 **Select Audio Device:**
@@ -106,11 +141,15 @@ You can customize the hardware setup using command-line arguments:
 
 # Traktor Z1 (adc 1 2, dac 3 4)
 ./start.sh audio-device=Z1
+
+# Mac/BlackHole dev (adc 1 2, dac 1 2)
+./start.sh device=MAC
 ```
 
 **Combine Arguments:**
 ```bash
 ./start.sh midi-device=X1MK3 audio-device=Z1
+./start.sh device=MAC midi-device=OSC
 ```
 
 **Play Mode (Resume Behavior):**

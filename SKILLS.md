@@ -8,6 +8,19 @@ cd ~/Documents/Code/slooper
 ./start.sh
 ```
 
+### Start Mac Dev Mode (BlackHole + Browser OSC)
+```bash
+cd ~/Documents/Code/PROJECTS/slooper
+./start.sh device=MAC midi-device=OSC
+open http://127.0.0.1:3000
+```
+
+In Audio MIDI Setup and Pd audio settings:
+- Route source audio into `BlackHole 2ch`
+- Set Pd input to `BlackHole 2ch`
+- Set Pd output to Mac speakers, headphones, or your normal output
+- Keep devices at `48kHz`
+
 ### Start the Looper (Raspberry Pi)
 ```bash
 ssh patch@patchbox.local
@@ -29,11 +42,18 @@ cd ~/slooper
 # Use Traktor X1 MK3 controller
 ./start.sh midi-device=X1MK3
 
+# Use browser OSC controller instead of MIDI hardware
+./start.sh midi-device=OSC
+
 # Use Traktor Z1 audio interface
 ./start.sh audio-device=Z1
 
+# Use Mac/BlackHole dev audio
+./start.sh device=MAC
+
 # Combine options
 ./start.sh midi-device=X1MK3 audio-device=Z1 --restart-jack
+./start.sh device=MAC midi-device=OSC
 ```
 
 ### Stop the Looper
@@ -43,6 +63,7 @@ cd ~/slooper
 
 # Or manually:
 pkill -f "node src/index.js"
+pkill -f "node src/dev_controller.js"
 pkill pd
 pkill jackd  # Linux only
 ```
@@ -122,6 +143,20 @@ node test/test_engine.js
 # Results show:
 # ✅ passed tests
 # ❌ failed tests with error messages
+```
+
+### Manual OSC Control
+```bash
+# Start Pd and the browser controller first
+./start.sh device=MAC midi-device=OSC
+
+# Or send one-off OSC commands from another terminal
+node send_osc.js /slot1 rec 1
+node send_osc.js /slot1 rec 0
+node send_osc.js /slot1 play 1
+node send_osc.js /slot1 crop -30
+node send_osc.js /slot1 reset 1
+node send_osc.js /monitor 1
 ```
 
 ### Watch Pure Data Console

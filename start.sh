@@ -12,8 +12,9 @@ cleanup() {
     echo ""
     echo "🧹 Cleaning up..."
     
-    # Kill Node controller
+    # Kill Node controllers
     pkill -f "node src/index.js" 2>/dev/null
+    pkill -f "node src/dev_controller.js" 2>/dev/null
     
     # Force kill any Pd instances
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -37,14 +38,21 @@ trap cleanup EXIT
 
 # Parse arguments first (need to check for --stop early)
 AUDIO_DEVICE="XONE"
+MIDI_DEVICE="XONE"
 RESTART_JACK=false
 STOP_ONLY=false
 
 for arg in "$@"
 do
     case $arg in
+        device=*)
+        AUDIO_DEVICE="${arg#*=}"
+        ;;
         audio-device=*)
         AUDIO_DEVICE="${arg#*=}"
+        ;;
+        midi-device=*)
+        MIDI_DEVICE="${arg#*=}"
         ;;
         --restart-jack)
         RESTART_JACK=true
@@ -84,6 +92,10 @@ if [ "$AUDIO_DEVICE" == "Z1" ]; then
     # Z1: adc 1 2, dac 3 4
     run_sed 's/adc~ [0-9]* [0-9]*/adc~ 1 2/' src/engine.pd
     run_sed 's/dac~ [0-9]* [0-9]*/dac~ 3 4/' src/engine.pd
+elif [ "$AUDIO_DEVICE" == "MAC" ] || [ "$AUDIO_DEVICE" == "BLACKHOLE" ]; then
+    # Mac dev: BlackHole 2ch input, built-in/headphone output
+    run_sed 's/adc~ [0-9]* [0-9]*/adc~ 1 2/' src/engine.pd
+    run_sed 's/dac~ [0-9]* [0-9]*/dac~ 1 2/' src/engine.pd
 elif [ "$AUDIO_DEVICE" == "XONE" ]; then
     # XONE: adc 9 10, dac 1 2
     run_sed 's/adc~ [0-9]* [0-9]*/adc~ 9 10/' src/engine.pd
@@ -179,5 +191,11 @@ fi
 
 sleep 3
 
-echo "🚀 Starting Node controller..."
-node src/index.js "$@"
+if [ "$MIDI_DEVICE" == "OSC" ] || [ "$MIDI_DEVICE" == "WEB" ]; then
+    echo "🚀 Starting OSC web controller..."
+    echo "🌐 Open http://127.0.0.1:3000"
+    node src/dev_controller.js
+else
+    echo "🚀 Starting Node MIDI controller..."
+    node src/index.js "$@"
+fi
