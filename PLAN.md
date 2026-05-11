@@ -1,204 +1,499 @@
-# Plan: Complete `looper_slot.pd` Refactor
+# Slooper Engineering Improvement Plan
 
-## Current state
+This plan addresses the current engineering, architecture, performance, developer-experience, and agent-experience issues found during the project review. It intentionally replaces the older `looper_slot.pd` refactor plan, because that work is now mostly represented in the current code and docs.
 
-- The committed `src/engine.pd` is the known-good behavioral reference:
-  - Slot 1 recording, playback, stop/resume, crop, reset, stereo buffers, anti-click envelope, state output, and monitor routing are implemented inline.
-  - Slot 2 OSC routing exists in the top-level route, but committed `engine.pd` does not implement slot 2 audio processing.
-  - There is no first-class `clear` route in the committed slot logic; Node sends `clear`, but Pd currently relies mostly on `play 0`/new recording behavior.
-- `src/engine.pd` is now mostly an orchestration patch:
-  - OSC receive/parse/route.
-  - Audio input scaling.
-  - Two `[looper_slot slot1]` / `[looper_slot slot2]` instances.
-  - Slot audio summing, monitor passthrough, DSP loadbang, and state `netsend`.
-- `src/looper_slot.pd` contains the per-slot audio engine:
-  - Left/right recording into `#1_data` / `#1_data_R`.
-  - Playback with `phasor~`, `tabread4~`, crop/reset length logic, and anti-click envelope.
-  - State output via `oscformat /state`.
-- `src/index.js` already sends slot-scoped OSC messages like `/slot1 rec 1`, `/slot2 crop -30`, `/slotX reset 1`, and `/slotX clear 1`.
-- Slot 2 is now wired in `engine.pd`, but the extracted slot abstraction still needs validation as the single source of truth for slot behavior.
+## Goals
 
-## Known-good baseline
+- Keep `src/engine.pd` and `src/looper_slot.pd` stable, reviewable, and safe for agents to work around.
+- Make hardware/device behavior explicit instead of spread across docs, shell scripts, and controller code.
+- Reduce duplicate controller logic between MIDI mode and browser OSC mode.
+- Improve test reliability so changes can be verified without manual Pure Data console inspection.
+- Make Raspberry Pi installs lighter and startup/shutdown safer.
+- Keep project guidance useful for future human and agent contributors without stale contradictions.
 
-Use this commit as the pre-refactor working reference:
+## Current Issues
 
-```text
-f9d710d7362e01f5643ae6e1bc3b03abdee8000f
-```
+1. `start.sh` mutates `src/engine.pd` on every run with `sed`.
+   - This makes normal execution dirty the working tree.
+   - It contradicts the project warning that text editing Pd files is fragile.
+   - It makes agent work riskier because runtime config and source code are mixed.
 
-Short ref:
+2. Linux audio-device selection is incomplete.
+   - `audio-device=Z1` changes Pd channel declarations, then Linux mode forces them back to `adc~ 1 2` / `dac~ 1 2`.
+   - JACK connections remain hardcoded to XONE capture channels 9/10.
+   - Device-specific JACK capture/playback routing needs to live in config.
 
-```text
-f9d710d
-```
+3. Cleanup is too broad.
+   - `start.sh` kills all Pd/JACK processes instead of only processes it started.
+   - This is acceptable on a dedicated appliance, but rough for development and unsafe for unrelated audio work.
 
-Commit message:
+4. Controller logic is duplicated.
+   - `src/index.js` and `src/dev_controller.js` both implement slot state, crop offsets, monitor behavior, and OSC command sequencing.
+   - Future bug fixes must be made twice.
 
-```text
-engine tidy. THis is working in one file. About to move to looper slot module
-```
+5. Node-side state can drift from Pd-side state.
+   - Node estimates loop length from `Date.now()` and assumes OSC commands succeed.
+   - Pd already emits `/state` messages; the controller should either reconcile with those or treat Pd as authoritative.
 
-Useful commands while refactoring:
+6. Tests are partly manual.
+   - Many tests only verify that commands can be sent or require "visual verification" in the Pd console.
+   - The test suite requires Pd to be started manually.
+   - There is no clear CI-like command that starts Pd, waits for readiness, runs tests, and shuts down.
+
+7. Performance and Pi install footprint can be improved.
+   - Runtime Pd `print` objects are always active.
+   - `puppeteer`, `puppeteer-extra`, and `puppeteer-extra-plugin-stealth` are production dependencies but do not appear to be used by project code.
+   - Pd array size and crop maximum should be checked for consistency.
+
+8. Developer experience needs consolidation.
+   - Useful commands exist in docs but not npm scripts.
+   - Node version guidance differs between README and CLAUDE.
+   - Hardware setup is scattered across `README.md`, `CLAUDE.md`, `SKILLS.md`, `start.sh`, and `src/index.js`.
+
+9. Agent experience is good but stale in places.
+   - The docs contain valuable Pd-specific warnings, but also contradictions and outdated values.
+   - `SKILLS.md` includes destructive git discard commands that agents should not follow without explicit user approval.
+   - Repo clutter makes intent harder to infer: empty files (`Audio`, `Bang`, `Start`), IDE files, root-level one-off scripts, and unused helper patches.
+
+## Phase 1: Stop Runtime Mutation Of Pd Source
+
+### Deliverables
+
+- Replace `sed` edits to `src/engine.pd` with one of these approaches:
+  - Preferred: make `engine.pd` use stable logical `adc~ 1 2` / `dac~ 1 2`, and handle hardware channel mapping outside Pd.
+  - Alternative: generate `.runtime/engine.pd` from a template and run Pd against the generated file.
+- Add `.runtime/` to `.gitignore` if generation is used.
+- Ensure `./start.sh` no longer changes tracked files during normal startup.
+
+### Suggested Work
+
+- On Linux/JACK, always keep Pd logical ports as `input_1/2` and `output_1/2`; select actual capture/playback ports through JACK config.
+- On macOS, prefer configuring device channels in Pd preferences or a separate Mac host patch rather than rewriting the main patch.
+- Add a guard command for agents:
 
 ```bash
-git diff f9d710d -- src/engine.pd src/looper_slot.pd
-git show f9d710d:src/engine.pd
-git show f9d710d:src/looper_slot.pd
+git diff -- src/engine.pd src/looper_slot.pd
 ```
 
-The behavioral source of truth is `f9d710d:src/engine.pd`. That file has the working inline slot 1 implementation. The goal is to preserve that behavior inside `src/looper_slot.pd`, then instantiate it per slot from `src/engine.pd`.
+This should remain clean after startup unless a developer intentionally edited patches.
 
-## Main risks to control
+### Acceptance Checks
 
-- Pd text patch editing is fragile because `#X connect` lines reference zero-based object indices.
-- Abstraction inlet/outlet ordering must be verified. The intended contract should be:
-  - Inlets: left audio signal, right audio signal, control messages.
-  - Outlets: left loop signal, right loop signal, formatted OSC state message.
-- `clear` is sent by Node but is not currently routed inside `looper_slot.pd`; `route rec play crop reset` drops it.
-- `length_msg.pd` and `state_msg.pd` exist but are not currently used. For this refactor, ignore them unless the message formatting inside `looper_slot.pd` becomes meaningfully harder to maintain.
-- `analyze_pd.py` currently treats every `#X` line as an object, including `#X f` formatting lines, which can produce misleading object indices for patches with split object formatting.
-- The final top-level patch should be easy to extend beyond two slots, so avoid slot-specific hardcoding outside the one necessary OSC route and one abstraction instance per slot.
+- `./start.sh device=MAC midi-device=OSC` does not modify tracked files.
+- `./start.sh audio-device=XONE` on Linux does not modify tracked files.
+- `git diff -- src/engine.pd` stays empty after startup and shutdown.
 
-## Proposed implementation plan
+## Phase 2: Centralize Device And Runtime Config
 
-1. Lock down the known-good behavior from committed `engine.pd`
-   - Use committed `src/engine.pd` as the reference for slot internals, especially the order of trigger objects around crop/reset.
-   - Map each inline slot 1 object group to the equivalent object group in `looper_slot.pd`.
-   - Check for behavioral drift introduced by the extraction, including state message formatting and the previous crop/reset fixes.
+### Deliverables
 
-2. Establish the abstraction contract
-   - Confirm the visual and runtime inlet/outlet order of `looper_slot.pd`.
-   - Adjust the abstraction layout if needed so the left-to-right inlet/outlet order matches the engine connections.
-   - Contract:
-     - Args: slot name, e.g. `[looper_slot slot1]`.
-     - Inlets: left audio signal, right audio signal, control messages.
-     - Outlets: left loop signal, right loop signal, formatted OSC state message.
-   - Keep `engine.pd` responsible only for global OSC routing, audio input/output, monitoring, slot mixing, and `netsend`.
-   - Keep each slot instance self-contained by deriving all array/state names from `$1`.
+- Add a config module/file, for example:
 
-3. Validate current slot 1 behavior before broadening changes
-   - Start Pd with `src/engine.pd`.
-   - Run the existing OSC regression flow against `/slot1`.
-   - Confirm state messages are emitted as `/state slot1 recording|stopped|playing|paused` and `/state slot1 length <ms>`.
-   - Confirm crop, reset, and anti-click playback still behave after extraction.
+```text
+config/devices.json
+src/config.js
+```
 
-4. Make `clear` a first-class slot command
-   - Change `looper_slot.pd` control routing from `rec play crop reset` to include `clear`.
-   - On `clear`, stop playback gate, reset phasor phase, reset crop accumulator, reset active/original length to a safe value, and stop recording writes.
-   - Emit a deterministic state message. Proposed default: `/state slotX stopped` plus `/state slotX length 0`, because Node's state machine already uses empty/stopped separately and no current code expects a `cleared` Pd state.
-   - Verify clear does not leave old playback audio running and does not carry crop offset into the next recording.
+- Move these values out of scattered code and docs:
+  - MIDI device match names.
+  - MIDI note/CC mappings.
+  - Audio device names.
+  - JACK device match rules.
+  - JACK capture ports.
+  - JACK playback ports.
+  - Pd launch mode.
+  - Default sample rate, period size, and period count.
+  - OSC host/ports.
+  - Hold threshold, crop step, and encoder throttle.
 
-5. Confirm true two-slot independence
-   - Verify `#1_data` and `#1_data_R` resolve to separate arrays for `slot1` and `slot2`.
-   - Record, play, crop, reset, pause, and clear each slot independently.
-   - Verify both slots can play together and sum correctly in `engine.pd`.
-   - Verify slot 1 commands never alter slot 2 state or length, and vice versa.
+### Suggested Config Shape
 
-6. Keep the top-level shape extendable
-   - Keep `engine.pd` as a repeated-slot host: one route outlet, one `[looper_slot slotN]`, two audio-sum connections, and one state-out connection per slot.
-   - Do not duplicate slot internals in `engine.pd`.
-   - If adding a third slot later, the expected work should be limited to:
-     - Add `slot3` to the OSC route.
-     - Add `[looper_slot slot3]`.
-     - Connect the shared audio inputs, slot outputs, and state outlet.
-     - Add a Node MIDI mapping/state entry.
+```json
+{
+  "osc": {
+    "host": "127.0.0.1",
+    "sendPort": 9000,
+    "statePort": 9001
+  },
+  "audioDevices": {
+    "XONE": {
+      "jackCardNameIncludes": "XONE",
+      "capturePorts": ["system:capture_9", "system:capture_10"],
+      "playbackPorts": ["system:playback_1", "system:playback_2"]
+    },
+    "Z1": {
+      "jackCardNameIncludes": "Traktor Z1",
+      "capturePorts": ["system:capture_1", "system:capture_2"],
+      "playbackPorts": ["system:playback_3", "system:playback_4"]
+    },
+    "MAC": {
+      "mode": "native-pd"
+    }
+  },
+  "midiDevices": {
+    "XONE": {},
+    "X1MK3": {},
+    "OSC": {}
+  }
+}
+```
 
-7. Decide what to do with helper abstractions
-   - Ignore `src/state_msg.pd` and `src/length_msg.pd` for the initial completion unless `looper_slot.pd` message wiring becomes messy.
-   - Include them in a possible later cleanup if multiple slot-like abstractions start formatting `/state` messages or if message formatting grows beyond simple state/length output.
+### Acceptance Checks
 
-8. Improve validation tooling before final edits
-   - Update or replace the local Pd parser/checker so it ignores `#X f` formatting lines and reports unresolved connections accurately.
-   - Add a simple check that `engine.pd` has the expected `[looper_slot ...]` instances and that each state outlet reaches `netsend`.
-   - Avoid large hand-written Pd text rewrites; prefer Pd GUI edits or tiny, reviewed textual patches.
+- Adding or changing a device mapping does not require editing controller logic.
+- `start.sh` reads config or delegates to a Node startup helper that reads config.
+- README, CLAUDE, and SKILLS no longer duplicate the full hardware mapping table.
 
-9. Update regression tests
-   - Extend `test/test_engine.js` to assert slot 2 state and length messages, not just command send success.
-   - Add clear-specific assertions:
-     - Clear emits the expected state.
-     - Clear followed by a fresh recording reports a fresh length.
-     - Clear stops playback state for both slots.
-   - Add cross-slot assertions:
-     - Slot 1 crop/reset does not affect slot 2.
-     - Slot 2 crop/reset does not affect slot 1.
+## Phase 3: Safer Process Lifecycle
 
-10. Documentation cleanup
-   - Update `CLAUDE.md` current-state notes once slot 2 is confirmed working.
-   - Update `README.md` TODOs if reset/slot 2 behavior is now fixed.
-   - Document the `looper_slot.pd` abstraction contract in a short comment block or repo doc.
+### Deliverables
 
-## Acceptance criteria
+- Replace broad process killing with tracked process cleanup.
+- Record child PIDs for Pd, JACK started by Slooper, and Node/web controller.
+- Only stop JACK automatically if Slooper started it, unless the user passes an explicit `--stop-jack` or `--force-cleanup` flag.
 
-- `engine.pd` contains no duplicated per-slot DSP logic.
-- `looper_slot.pd` is the only implementation of slot recording/playback/crop/reset/clear behavior.
-- `/slot1` and `/slot2` both support `rec`, `play`, `crop`, `reset`, and `clear`.
-- Both slots emit correctly namespaced `/state` messages.
-- Existing crop timing, crop persistence, reset, and over-record regressions still pass for slot 1.
-- Equivalent core behavior is covered for slot 2.
-- Clearing a slot stops playback and resets crop/length state before the next recording.
-- Adding another slot later does not require copying internal slot DSP/state logic.
+### Suggested Work
 
-## Pd GUI/runtime validation context
+- Use a runtime PID directory:
 
-The reason I asked about Pd GUI/runtime validation is that Pd patch files are fragile to edit as raw text. Adding or deleting one object changes the object numbers used by every later `#X connect` line. The Pd GUI rewrites those indices correctly when objects are added and connected visually.
+```text
+.runtime/pids/
+```
 
-There are two practical approaches:
+- Add commands:
 
-1. Text-only edits plus checks
-   - Faster for small, mechanical changes.
-   - Higher risk if we need to add several Pd objects or reconnect internals.
-   - Requires parser/checker validation and OSC runtime tests afterward.
+```bash
+./start.sh --stop
+./start.sh --status
+./start.sh --force-cleanup
+```
 
-2. Pd GUI/runtime validation
-   - Safer for object insertion/reconnection because Pd manages indices.
-   - Lets us open `engine.pd`, confirm abstractions instantiate, watch console errors, and run OSC tests against a real patch.
-   - More manual, but better for validating audio patch behavior.
+- Keep a dedicated-appliance mode for Pi if desired:
 
-Recommendation: use text edits only for simple, reviewable changes; use Pd runtime validation before considering the refactor done.
+```bash
+./start.sh --appliance
+```
 
-## Manual Pd Editor Workflow
+In appliance mode, broad cleanup can remain available and explicit.
 
-Since the structural Pd changes will be safer in the Pd editor, use this workflow:
+### Acceptance Checks
 
-1. I will describe the exact patch-level change needed.
-2. You make the structural edit in Pd and save the file.
-3. I review the saved `.pd` diff and connection graph.
-4. We repeat until `looper_slot.pd` matches the committed `engine.pd` slot behavior.
-5. I can then update tests/docs and do any small text-only cleanup.
+- Stopping Slooper does not kill unrelated Pd/JACK sessions by default.
+- `./start.sh --stop` cleans up Slooper-started processes.
+- `./start.sh --force-cleanup` keeps the current broad behavior for emergency use.
 
-The first manual-editor pass should focus on these changes:
+## Phase 4: Extract Shared Controller Core
 
-1. Rebuild or repair `looper_slot.pd` from committed `engine.pd` slot 1 logic
-   - Use the committed inline slot 1 logic as the source of truth.
-   - Keep the slot abstraction argument as the slot name.
-   - Replace hardcoded slot-specific resources with argument-derived names:
-     - `slot1_data` -> `#1_data`
-     - `slot1_data_R` -> `#1_data_R`
-     - state messages should output the instance slot name, e.g. `slot1` or `slot2`.
-   - Preserve the existing crop/reset trigger ordering from committed `engine.pd`.
+### Deliverables
 
-2. Set the abstraction interface clearly
-   - Inlets, left to right:
-     - left audio signal
-     - right audio signal
-     - control messages
-   - Outlets, left to right:
-     - left loop signal
-     - right loop signal
-     - formatted `/state` OSC message
-   - After saving, I will verify the actual inlet/outlet ordering from the file and top-level connections.
+- Split `src/index.js` into small modules.
+- Make MIDI mode and browser mode use the same slot state machine and OSC command sequencing.
 
-3. Keep `engine.pd` as a slot host
-   - `engine.pd` should have one `[looper_slot slotN]` object per slot.
-   - Both slots should receive the same scaled stereo audio input.
-   - Each slot audio output should feed the shared stereo sum.
-   - Each slot state outlet should feed the shared `netsend`.
-   - The only slot-specific top-level wiring should be route outlet -> slot control inlet and slot outputs -> mix/state.
+### Proposed Structure
 
-4. Leave helper abstractions alone for now
-   - Do not wire `length_msg.pd` or `state_msg.pd` into the current refactor.
-   - Revisit later only if message formatting becomes duplicated outside `looper_slot.pd`.
+```text
+src/
+  controller/
+    slot_controller.js       # slot state machine and high-level actions
+    osc_transport.js         # send OSC and receive /state
+    midi_adapter.js          # maps MIDI events to controller actions
+    web_adapter.js           # maps HTTP actions to controller actions
+    state.js                 # state constants and serialization
+  config.js
+  index.js                  # MIDI entrypoint
+  dev_controller.js          # web entrypoint
+```
 
-5. Defer `clear` until the extraction exactly matches known-good behavior
-   - First goal: extracted slot 1 behaves like committed inline slot 1, and slot 2 behaves the same independently.
-   - Second goal: add `clear` as a proper command once the extraction baseline is stable.
+### Suggested Work
+
+- Replace numeric slot states with named constants:
+
+```javascript
+const SlotState = {
+  EMPTY: 0,
+  RECORDING: 1,
+  PLAYING: 2,
+  STOPPED: 3,
+};
+```
+
+- Move these actions into the shared controller:
+  - tap slot
+  - clear slot
+  - crop slot
+  - reset slot
+  - monitor toggle
+  - monitor auto-mute when any loop is playing
+
+- Keep MIDI-specific behavior in `midi_adapter.js`:
+  - hold timer
+  - note/CC matching
+  - LED output
+  - play-on-press vs play-on-release
+
+- Keep browser-specific behavior in `web_adapter.js`:
+  - HTTP routing
+  - static HTML serving
+  - JSON serialization
+
+### Acceptance Checks
+
+- A crop/reset/clear behavior change is made in one shared place.
+- Browser controller and MIDI controller produce the same OSC command sequence for the same high-level action.
+- Existing manual workflows still work:
+
+```bash
+./start.sh
+./start.sh device=MAC midi-device=OSC
+```
+
+## Phase 5: Make Pd State Authoritative
+
+### Deliverables
+
+- Add a state-listening OSC server to the controller path, not just the test path.
+- Reconcile Node/web state from Pd `/state` messages.
+- Decide what Node is responsible for versus what Pd is responsible for.
+
+### Recommended Contract
+
+- Pd is authoritative for:
+  - actual recorded length
+  - cropped/current playback length
+  - recording/playing/paused/stopped state emitted from the audio engine
+  - clear/reset result
+
+- Node is authoritative for:
+  - incoming user intent
+  - hold detection
+  - MIDI LED presentation
+  - monitor preference before auto-mute
+
+### Suggested Work
+
+- Have the shared OSC transport listen on state port `9001`.
+- Update slot length from `/state slotX length <ms>`.
+- Update slot state from `/state slotX recording|playing|paused|stopped`.
+- Keep a transient "pending action" if needed for responsive LED/UI feedback.
+- Consider adding a `/state slotX empty` or `/state slotX cleared` message only if the current `stopped + length 0` contract becomes ambiguous.
+
+### Acceptance Checks
+
+- Browser UI shows Pd-reported loop length, not a `Date.now()` estimate.
+- MIDI LED behavior recovers if Pd emits a state that differs from the assumed Node state.
+- Tests can validate controller state by sending fake or real `/state` messages.
+
+## Phase 6: Improve Test Automation
+
+### Deliverables
+
+- Convert visual-verification tests into assertions where possible.
+- Add a test command that starts Pd headless for the integration suite.
+- Add unit tests for the shared controller core.
+
+### Proposed Scripts
+
+```json
+{
+  "scripts": {
+    "test": "npm run test:unit && npm run test:engine",
+    "test:unit": "node --test test/unit/*.test.js",
+    "test:engine": "node test/test_engine.js",
+    "test:engine:managed": "node test/run_engine_tests.js",
+    "dev:mac": "./start.sh device=MAC midi-device=OSC",
+    "midi:log": "node src/midi_logger.js",
+    "osc:debug": "node debug_osc.js"
+  }
+}
+```
+
+### Engine Test Improvements
+
+- Add assertions for every currently visual-only test:
+  - `rec 1` emits `recording`.
+  - `rec 0` emits `stopped` and `length`.
+  - `play 1` emits `playing`.
+  - `play 0` emits `paused`.
+  - crop lower bound emits the minimum length.
+  - cumulative crop emits the expected length.
+  - monitor command emits a state/debug message, if Pd is extended to report monitor state.
+
+- Add startup readiness:
+  - Start Pd with `pd -nogui -nomidi src/engine.pd` where possible.
+  - Send `/connect` until state port receives a known response.
+  - Fail fast with a clear message if Pd is missing.
+
+### Unit Test Targets
+
+- Tap state transitions.
+- Hold-to-clear behavior.
+- Play-on-press versus play-on-release.
+- Crop throttling and delta accumulation.
+- Monitor auto-mute.
+- State reconciliation from `/state`.
+
+### Acceptance Checks
+
+- `npm test` has no tests that pass only because "no exception was thrown" unless that is explicitly the behavior under test.
+- A clean checkout can run a documented test command on Mac dev mode.
+- Known regressions from CLAUDE are represented by named tests.
+
+## Phase 7: Performance And Pi Footprint
+
+### Deliverables
+
+- Remove unused heavy dependencies or move browser tooling to `devDependencies`.
+- Add debug gating for Pd console output.
+- Align buffer size, sample rate, and crop/record limits.
+
+### Suggested Work
+
+- Search usage before removing dependencies:
+
+```bash
+grep -R "puppeteer\\|puppeteer-extra" . --exclude-dir=node_modules
+```
+
+- If unused, remove:
+
+```bash
+npm uninstall puppeteer puppeteer-extra puppeteer-extra-plugin-stealth
+```
+
+- If browser tests are added later, install only `puppeteer` as a dev dependency.
+- Add a Pd debug control path or maintain separate debug patches if runtime print gating is awkward in Pd.
+- Verify these values agree:
+  - array size in samples
+  - sample rate
+  - maximum recording/extension length
+  - crop upper bound
+
+### Acceptance Checks
+
+- `npm install --omit=dev` on Pi does not install Chromium/Puppeteer.
+- Normal Pi runtime does not spam Pd console unless debug is enabled.
+- The maximum loop length cannot exceed allocated array capacity.
+
+## Phase 8: Developer Experience Cleanup
+
+### Deliverables
+
+- Add practical npm scripts.
+- Add `engines.node` to `package.json`.
+- Normalize project docs around one recommended Node version.
+- Move helper scripts into `scripts/`.
+
+### Suggested Work
+
+- Use Node 18+ as the current practical baseline unless testing proves Node 20+ works cleanly on the Pi target.
+- Update `package.json`:
+
+```json
+{
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=18"
+  }
+}
+```
+
+- Move root scripts:
+  - `send_osc.js` -> `scripts/send_osc.js`
+  - `debug_osc.js` -> `scripts/debug_osc.js`
+  - `analyze_pd.py` -> `scripts/analyze_pd.py`
+  - `parse_pd.js` -> `scripts/parse_pd.js`
+
+- Delete or document:
+  - `Audio`
+  - `Bang`
+  - `Start`
+  - `src/engine_connections.pd.txt`
+  - `src/engine_connections.txt`
+  - `src/length_msg.pd`
+  - `src/state_msg.pd`
+
+Only delete helper files after confirming they are not used by an active workflow.
+
+### Acceptance Checks
+
+- `npm run` shows the common project workflows.
+- A new developer can start Mac dev mode from README without reading three docs.
+- Root directory contains source, docs, package files, and clearly named script/config directories only.
+
+## Phase 9: Agent Experience And Documentation
+
+### Deliverables
+
+- Split human-facing and agent-facing docs cleanly.
+- Remove contradictions between README, CLAUDE, SKILLS, code, and tests.
+- Replace destructive agent instructions with safer alternatives.
+
+### Suggested Documentation Shape
+
+```text
+README.md       # user/developer quickstart and architecture summary
+AGENTS.md       # agent-safe implementation guidance
+SKILLS.md       # operational commands only, if still useful
+CLAUDE.md       # optional compatibility copy or remove after AGENTS.md exists
+```
+
+### Required Doc Fixes
+
+- Fix README nested code fence in the Pi Node install section.
+- Align Node version guidance.
+- Align `CONFIG.throttleMs` docs with code.
+- Align hold threshold wording: docs say 500ms, runtime log says "Hold 1s".
+- Keep Pd editing warnings, especially:
+  - Pure Data object indices are fragile.
+  - Escaped commas in saved `expr` objects.
+  - `print` has no outlets.
+  - abstraction args use `$1`.
+  - trigger order is right-to-left.
+- Remove or soften destructive git commands in `SKILLS.md`.
+  - Replace `git checkout HEAD -- .` with "ask before discarding changes".
+
+### Acceptance Checks
+
+- A future agent can identify:
+  - entrypoints
+  - source-of-truth config
+  - test commands
+  - safe Pd editing rules
+  - prohibited destructive operations
+- Docs do not contain stale implementation claims contradicted by code.
+
+## Phase 10: Optional Product Improvements
+
+These are not blockers for the engineering cleanup, but they are natural next features once the base is stable.
+
+- Pre-record buffer so loop start can be adjusted, not just loop end.
+- Loop position feedback in Pd, browser UI, and/or MIDI LEDs.
+- Better web controller affordances:
+  - keyboard shortcuts
+  - current loop position
+  - Pd connection status
+  - authoritative Pd length/state display
+- More than two slots through a config-driven slot list.
+
+## Recommended Execution Order
+
+1. Stop mutating `src/engine.pd` at startup.
+2. Centralize device config and fix Linux `audio-device` JACK routing.
+3. Make process lifecycle cleanup safer.
+4. Extract shared controller core.
+5. Make Pd `/state` authoritative in Node/web state.
+6. Upgrade tests and add a managed engine test runner.
+7. Remove unused dependencies and reduce Pi runtime noise.
+8. Clean npm scripts, Node version, helper files, and repo layout.
+9. Refresh README/AGENTS/SKILLS/CLAUDE so future agents get accurate guidance.
+
+## Definition Of Done
+
+- Normal startup and shutdown leave the git worktree clean.
+- `audio-device=XONE`, `audio-device=Z1`, and `device=MAC` are represented in centralized config.
+- Browser and MIDI controls share the same core controller behavior.
+- Controller state is reconciled from Pd `/state` messages.
+- Tests cover state transitions, crop/reset/clear regressions, slot independence, and controller core logic.
+- Pi production install avoids unused browser automation dependencies.
+- Runtime Pd logging can be disabled.
+- Docs are consistent, agent-safe, and current.

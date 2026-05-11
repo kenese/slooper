@@ -132,7 +132,7 @@ jack_connect system:capture_10 pure_data:input_2
 ./start.sh
 
 # In another terminal, run tests
-node test/test_engine.js
+npm test
 ```
 
 ### Test Specific Features
@@ -182,11 +182,72 @@ node src/midi_logger.js
 open src/engine.pd
 ```
 
+### Pure Data Architecture Quick Reference
+```text
+engine.pd
+  netreceive 9000
+    -> oscparse
+    -> list trim
+    -> route slot1 slot2 monitor connect
+
+  adc~
+    -> input gain
+    -> [looper_slot slot1]
+    -> [looper_slot slot2]
+
+  slot audio outlets
+    -> stereo sum
+    -> dac~
+
+  slot state outlets
+    -> netsend 9001
+```
+
+`engine.pd` is the host patch. It should own OSC routing, shared audio input/output, monitor dry-through, slot summing, DSP startup, and `netsend`.
+
+`looper_slot.pd` owns one slot's internals: stereo record buffers, playback, crop, reset, clear, anti-click envelope, and `/state` formatting.
+
+`looper_slot.pd` contract:
+- Argument: slot name, e.g. `[looper_slot slot1]`
+- Inlets left-to-right: left audio, right audio, control messages
+- Outlets left-to-right: left loop audio, right loop audio, `/state` message
+
+Slot-local array/message names must use Pd abstraction argument syntax:
+```text
+\$1_data
+\$1_data_R
+list prepend \$1
+list prepend \$1 length
+```
+
+Do not use `#1`; Pd treats it literally.
+
 ### Test Patch Syntax
 ```bash
 # Pure Data doesn't have a syntax check mode
 # Just open in GUI and look for errors in console
 ```
+
+### State Message Contract
+```text
+/slotX rec 1     -> /state slotX recording
+/slotX rec 0     -> /state slotX stopped, /state slotX length <ms>
+/slotX play 1    -> /state slotX playing
+/slotX play 0    -> /state slotX paused
+/slotX crop N    -> /state slotX length <ms>
+/slotX reset 1   -> /state slotX length <original-ms>
+/slotX clear 1   -> /state slotX length 0, /state slotX stopped
+```
+
+Tests should capture loop length from `rec 0`, `crop`, `reset`, or `clear`. `play` does not emit length.
+
+### Safe Pd Editing Rules
+- Prefer the Pd GUI for structural changes; Pd rewrites object indices correctly.
+- Text edits are OK for narrow substitutions, but adding/removing objects by text can corrupt `#X connect` indices.
+- Commas in saved `expr` objects must be escaped as `\,`.
+- `print` has no outlets. Delete any connection where `print` is the source.
+- Trigger outlets fire right-to-left. Crop/reset bugs are often trigger-order bugs.
+- In abstraction files, inlet/outlet order is visual left-to-right.
 
 ## Common Debugging
 
@@ -252,15 +313,15 @@ ssh patch@patchbox.local "cd ~/slooper && git pull origin main"
 5. Add command-line parsing in `start.sh` if needed
 6. Test: `./start.sh midi-device=NEWDEVICE`
 
-### Add Slot 2 Audio (GUI Method)
+### Add Another Slot (GUI Method)
 1. `open src/engine.pd` in Pure Data
-2. Find the `route slot1 slot2 monitor connect` object
-3. Locate all slot1 processing objects (between route and dac~)
-4. Select them, Cmd+C to copy, Cmd+V to paste
-5. Move pasted objects to the right
-6. Edit array names: `slot1_data` → `slot2_data`, `slot1_data_R` → `slot2_data_R`
-7. Connect slot2 outlet (index 1) from main router to new chain
-8. Connect new chain output to `dac~`
+2. Add the new slot name to the top-level route, e.g. `route slot1 slot2 slot3 monitor connect`
+3. Add a new `[looper_slot slot3]` object
+4. Connect shared scaled left/right audio into the first two inlets
+5. Connect the matching route outlet to the control inlet
+6. Connect the two audio outlets to the stereo sum
+7. Connect the state outlet to `netsend`
+8. Add the matching Node MIDI/OSC state mapping in `src/index.js` or the dev controller
 9. Cmd+S to save
 10. Restart: `./start.sh`
 

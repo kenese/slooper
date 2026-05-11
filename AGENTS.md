@@ -1,4 +1,4 @@
-# CLAUDE.md - Slooper Project Context
+# AGENTS.md - Slooper Project Context
 
 ## Project Overview
 **Slooper** is a DIY hardware looper built on Raspberry Pi using Node.js (MIDI/OSC controller) and Pure Data (audio engine) that records, plays, and manipulates audio loops with anti-click processing.

@@ -126,6 +126,72 @@ The engine tests are OSC integration tests. Start Pure Data with `src/engine.pd`
 npm test
 ```
 
+## Pure Data Architecture
+
+The Pure Data side is split into a small top-level host patch and a reusable slot abstraction.
+
+```text
+src/engine.pd
+  netreceive 9000
+    -> oscparse
+    -> list trim
+    -> route slot1 slot2 monitor connect
+
+  adc~
+    -> input gain
+    -> looper_slot slot1
+    -> looper_slot slot2
+
+  slot audio outputs
+    -> stereo sum
+    -> dac~
+
+  slot state outputs
+    -> netsend 9001
+```
+
+`src/engine.pd` should stay thin. It owns OSC routing, shared audio input/output, monitor passthrough, slot summing, DSP startup, and the outbound OSC connection back to Node/browser tests.
+
+`src/looper_slot.pd` owns one loop slot. It is instantiated as `[looper_slot slot1]`, `[looper_slot slot2]`, etc.
+
+```text
+looper_slot inlets:
+  1. left audio signal
+  2. right audio signal
+  3. control messages: rec, play, crop, reset, clear
+
+looper_slot outlets:
+  1. left loop signal
+  2. right loop signal
+  3. formatted /state OSC message
+```
+
+Each slot creates its own audio arrays from the abstraction argument:
+
+```text
+$1_data
+$1_data_R
+```
+
+That means `[looper_slot slot1]` uses `slot1_data`/`slot1_data_R`, while `[looper_slot slot2]` uses `slot2_data`/`slot2_data_R`.
+
+Length handling inside `looper_slot.pd` has three separate memories:
+
+- **Original length**: set from `[timer]` when recording stops.
+- **Current length**: updated by crop deltas and restored from original on reset.
+- **Playback length**: drives phasor speed, sample position, anti-click window, debug/state length output.
+
+`rec 0`, `crop`, `reset`, and `clear` emit `/state slotX length ...`. `play` emits only `playing`/`paused` state.
+
+To add another slot later, the expected Pd work is:
+
+1. Add the slot name to the top-level route, e.g. `slot3`.
+2. Add `[looper_slot slot3]`.
+3. Connect shared stereo input into the new slot.
+4. Connect the new slot's stereo outputs into the stereo sum.
+5. Connect the new slot's state outlet into `netsend`.
+6. Add the matching Node MIDI/OSC state mapping.
+
 ### Configuration
 
 You can customize the hardware setup using command-line arguments:
