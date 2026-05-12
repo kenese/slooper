@@ -125,6 +125,29 @@ function normalizeCaptureSources(jack) {
     }];
 }
 
+function normalizeMacPdSource(source, index) {
+    if (!source || typeof source !== 'object') {
+        throw new Error(`Invalid Pd darwinSources entry at index ${index}`);
+    }
+    if (!source.id) {
+        throw new Error(`Missing Pd darwin source id at index ${index}`);
+    }
+    if (!isPair(source.adc)) {
+        throw new Error(`Missing Pd darwin source adc channel pair for ${source.id}`);
+    }
+    return {
+        id: source.id,
+        adc: source.adc,
+    };
+}
+
+function normalizeMacPdSources(pd) {
+    if (!Array.isArray(pd.darwinSources)) {
+        return [];
+    }
+    return pd.darwinSources.map(normalizeMacPdSource);
+}
+
 function validateAudioConfig(raw) {
     if (!raw.name) {
         throw new Error('Missing audio config name');
@@ -175,6 +198,7 @@ function normalizeAudioConfig(raw) {
         captureSources,
         playbackPorts: jack.playbackPorts || [],
         macPdChannels: pd.darwin || { adc: [1, 2], dac: [1, 2] },
+        macPdSources: normalizeMacPdSources(pd),
         linuxPdChannels: pd.linux || { adc: [1, 2], dac: [1, 2] },
         jack: {
             sampleRate: jack.sampleRate,
@@ -385,13 +409,15 @@ function getRuntimeConfig(options = {}) {
 }
 
 function replacePdChannels(source, objectName, channels) {
-    const [left, right] = channels;
-    const pattern = new RegExp(`${objectName}~\\s+[0-9]+\\s+[0-9]+`, 'g');
-    return source.replace(pattern, `${objectName}~ ${left} ${right}`);
+    const pattern = new RegExp(`${objectName}~(?:\\s+[0-9]+)+`, 'g');
+    return source.replace(pattern, `${objectName}~ ${channels.join(' ')}`);
 }
 
 function renderEnginePatch(source, config) {
-    let rendered = replacePdChannels(source, 'adc', config.pd.channels.adc);
+    const adcChannels = config.pd.generateRuntimePatch && config.audio.macPdSources.length > 0
+        ? config.audio.macPdSources.flatMap((sourceConfig) => sourceConfig.adc)
+        : config.pd.channels.adc;
+    let rendered = replacePdChannels(source, 'adc', adcChannels);
     rendered = replacePdChannels(rendered, 'dac', config.pd.channels.dac);
     if (config.pd.generateRuntimePatch && !rendered.includes('#X declare -path ../src;')) {
         rendered = rendered.replace(

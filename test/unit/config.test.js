@@ -334,7 +334,7 @@ test('runtime_config parses explicit config path arguments', () => {
     });
 });
 
-test('mac XONE renders a runtime patch with direct channel selection', () => {
+test('mac XONE renders a runtime patch with direct output channel selection', () => {
     const source = [
         '#N canvas 0 0 100 100 12;',
         '#X obj 14 130 adc~ 1 2;',
@@ -353,9 +353,27 @@ test('mac XONE renders a runtime patch with direct channel selection', () => {
     assert.equal(renderEnginePatch(source, config), [
         '#N canvas 0 0 100 100 12;',
         '#X declare -path ../src;',
-        '#X obj 14 130 adc~ 9 10;',
+        '#X obj 14 130 adc~ 3 4 5 6 9 10;',
         '#X obj 184 479 dac~ 1 2;',
     ].join('\n'));
+});
+
+test('mac XONE renders runtime patch with all selectable source input channels', () => {
+    const source = [
+        '#N canvas 0 0 100 100 12;',
+        '#X obj 14 130 adc~ 1 2;',
+        '#X obj 184 479 dac~ 1 2;',
+    ].join('\n');
+
+    const config = getRuntimeConfig({
+        audioDevice: 'XONE',
+        midiDevice: 'OSC',
+        platform: 'darwin',
+        projectRoot: '/repo',
+    });
+
+    assert.deepEqual(config.audio.captureSources.map((item) => item.id), ['main', 'ch2', 'ch3']);
+    assert.equal(renderEnginePatch(source, config).includes('adc~ 3 4 5 6 9 10'), true);
 });
 
 test('runtime patch declares source directory so Pd can load abstractions', () => {
