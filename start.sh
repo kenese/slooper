@@ -75,10 +75,23 @@ stop_pid() {
     rm -f "$file"
 }
 
+stop_untracked_macos_pd() {
+    if [[ "$OSTYPE" != "darwin"* ]]; then
+        return
+    fi
+
+    echo "   Stopping untracked macOS Pure Data processes"
+    killall "Pd-0.56-2" 2>/dev/null || true
+    killall Pd 2>/dev/null || true
+    killall pd 2>/dev/null || true
+    lsof -nP -iUDP:9000 -iUDP:9001 -iTCP:3000 2>/dev/null || true
+}
+
 tracked_cleanup() {
     echo "Cleaning up Slooper-managed processes..."
     stop_pid "controller"
     stop_pid "pd"
+    stop_untracked_macos_pd
     if [ "$STOP_JACK" = true ]; then
         stop_pid "jack"
     fi
