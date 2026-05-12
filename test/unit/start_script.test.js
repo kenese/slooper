@@ -23,3 +23,7 @@ test('start.sh mac cleanup stops untracked Pd processes and inspects common dev 
     assert.match(startScript, /killall pd 2>\/dev\/null \|\| true/);
     assert.match(startScript, /lsof -nP -iUDP:9000 -iUDP:9001 -iTCP:3000 2>\/dev\/null \|\| true/);
 });
+
+test('start.sh avoids awk built-in names for JACK card lookup variables', () => {
+    assert.doesNotMatch(startScript, /awk -v match=/);
+});
