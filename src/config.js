@@ -413,12 +413,81 @@ function replacePdChannels(source, objectName, channels) {
     return source.replace(pattern, `${objectName}~ ${channels.join(' ')}`);
 }
 
+function parsePdObjects(source) {
+    const objects = [];
+
+    source.split('\n').forEach((line) => {
+        if (line.startsWith('#X ') && !line.startsWith('#X connect ')) {
+            objects.push({ id: objects.length, line });
+        }
+    });
+
+    return objects;
+}
+
+function getRouteItems(line) {
+    const match = line.match(/^#X obj \d+ \d+ route (.+);$/);
+    return match ? match[1].trim().split(/\s+/) : [];
+}
+
+function rewriteMacSourceSelectorConnections(source, config) {
+    if (!config.pd.generateRuntimePatch || config.audio.macPdSources.length === 0) {
+        return source;
+    }
+
+    const objects = parsePdObjects(source);
+    const adc = objects.find((object) => /^#X obj \d+ \d+ adc~ /.test(object.line));
+    const sourceRoute = objects.find((object) => /^#X obj \d+ \d+ route main ch2 ch3;$/.test(object.line));
+
+    if (!adc || !sourceRoute) {
+        return source;
+    }
+
+    const routeSources = getRouteItems(sourceRoute.line);
+    const sourceOutletMap = new Map();
+    config.audio.macPdSources.forEach((sourceConfig, index) => {
+        sourceOutletMap.set(sourceConfig.id, index * 2);
+    });
+
+    const lines = source.split('\n');
+    const adcInputConnectionPattern = new RegExp(`^#X connect ${adc.id} \\d+ (\\d+) (\\d+);$`);
+    const sourceInputConnections = [];
+
+    lines.forEach((line, index) => {
+        const match = line.match(adcInputConnectionPattern);
+        if (match) {
+            sourceInputConnections.push({
+                index,
+                target: Number(match[1]),
+                targetInlet: Number(match[2]),
+            });
+        }
+    });
+
+    if (sourceInputConnections.length !== routeSources.length * 2) {
+        throw new Error('Pd source selector input connections do not match source route');
+    }
+
+    sourceInputConnections.forEach((connection, index) => {
+        const sourceId = routeSources[Math.floor(index / 2)];
+        const sourceOutlet = sourceOutletMap.get(sourceId);
+        if (sourceOutlet === undefined) {
+            throw new Error(`Missing mac Pd source channel mapping for ${sourceId}`);
+        }
+        const adcOutlet = sourceOutlet + (index % 2);
+        lines[connection.index] = `#X connect ${adc.id} ${adcOutlet} ${connection.target} ${connection.targetInlet};`;
+    });
+
+    return lines.join('\n');
+}
+
 function renderEnginePatch(source, config) {
     const adcChannels = config.pd.generateRuntimePatch && config.audio.macPdSources.length > 0
         ? config.audio.macPdSources.flatMap((sourceConfig) => sourceConfig.adc)
         : config.pd.channels.adc;
     let rendered = replacePdChannels(source, 'adc', adcChannels);
     rendered = replacePdChannels(rendered, 'dac', config.pd.channels.dac);
+    rendered = rewriteMacSourceSelectorConnections(rendered, config);
     if (config.pd.generateRuntimePatch && !rendered.includes('#X declare -path ../src;')) {
         rendered = rendered.replace(
             /^(#N canvas [^\n]*;\n?)/,

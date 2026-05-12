@@ -376,6 +376,27 @@ test('mac XONE renders runtime patch with all selectable source input channels',
     assert.equal(renderEnginePatch(source, config).includes('adc~ 3 4 5 6 9 10'), true);
 });
 
+test('mac XONE runtime patch keeps source selector with expanded adc channel mapping', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'engine.pd'), 'utf8');
+    const config = getRuntimeConfig({
+        audioDevice: 'XONE',
+        midiDevice: 'OSC',
+        platform: 'darwin',
+        projectRoot: '/repo',
+    });
+    const rendered = renderEnginePatch(source, config);
+
+    assert.match(rendered, /adc~ 3 4 5 6 9 10/);
+    assert.match(rendered, /route slot1 slot2 monitor connect source/);
+    assert.match(rendered, /route main ch2 ch3/);
+    assert.match(rendered, /#X connect 5 4 41 0;/);
+    assert.match(rendered, /#X connect 5 5 42 0;/);
+    assert.match(rendered, /#X connect 5 0 43 0;/);
+    assert.match(rendered, /#X connect 5 1 44 0;/);
+    assert.match(rendered, /#X connect 5 2 45 0;/);
+    assert.match(rendered, /#X connect 5 3 46 0;/);
+});
+
 test('runtime patch declares source directory so Pd can load abstractions', () => {
     const source = [
         '#N canvas 0 0 100 100 12;',
