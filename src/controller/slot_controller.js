@@ -422,6 +422,8 @@ class SlotController {
             await this.inputRouter.selectSource(source, this.inputSources);
         }
 
+        await this.send('/source', source.id);
+
         this.selectedInputSourceId = source.id;
         this.emitChange();
         return { ok: true, action: 'select-input-source', sourceId: source.id };

@@ -103,7 +103,30 @@ test('selectInputSource switches global capture source through the router', asyn
             { id: 'ch3', label: 'Channel 3', ports: ['system:capture_5', 'system:capture_6'] },
         ],
     }]);
-    assert.deepEqual(transport.commands, []);
+    assert.deepEqual(transport.commands, [['/source', 'ch3']]);
+});
+
+test('selectInputSource sends source OSC and runs input router when configured', async () => {
+    const sent = [];
+    const routed = [];
+    const controller = createController({
+        transport: {
+            send: async (...args) => sent.push(args),
+        },
+        inputSources: [
+            { id: 'main', label: 'PX5 Send', ports: ['system:capture_9', 'system:capture_10'] },
+            { id: 'ch2', label: 'PX5 Channel 2', ports: ['system:capture_3', 'system:capture_4'] },
+        ],
+        inputRouter: {
+            selectSource: async (source, sources) => routed.push([source.id, sources.map((item) => item.id)]),
+        },
+    });
+
+    await controller.selectInputSource('ch2');
+
+    assert.deepEqual(sent, [['/source', 'ch2']]);
+    assert.deepEqual(routed, [['ch2', ['main', 'ch2']]]);
+    assert.equal(controller.getState().inputRouting.selectedSourceId, 'ch2');
 });
 
 test('selectInputSource rejects unknown capture source ids', async () => {
