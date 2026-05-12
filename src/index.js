@@ -2,7 +2,9 @@ const easymidi = require('easymidi');
 
 const { getRuntimeConfig } = require('./config');
 const { createController, SlotState } = require('./controller/slot_controller');
+const { JackCaptureRouter } = require('./controller/jack_capture_router');
 const { OscTransport } = require('./controller/osc_transport');
+const { MidiClockTracker, TapTempoTracker, TempoSource } = require('./controller/tempo');
 
 const args = process.argv.slice(2);
 const midiArg = args.find((arg) => arg.startsWith('midi-device='));
@@ -104,6 +106,9 @@ function openMidiOutput() {
 }
 
 let controller;
+const midiClock = new MidiClockTracker();
+const tapTempo = new TapTempoTracker();
+const tempo = new TempoSource({ clock: midiClock, tap: tapTempo });
 const transport = new OscTransport({
     host: runtimeConfig.osc.host,
     sendPort: runtimeConfig.osc.sendPort,
@@ -133,7 +138,23 @@ function setupMidiHandlers(input, output) {
         { id: 1, note: midi.slot1.note, channel: midi.slot1.channel, holdTimer: null, actionFired: false },
         { id: 2, note: midi.slot2.note, channel: midi.slot2.channel, holdTimer: null, actionFired: false },
     ];
+    const autoLoopButtons = [
+        ...createAutoLoopButtons(1, midi.slot1.autoLoops),
+        ...createAutoLoopButtons(2, midi.slot2.autoLoops),
+    ];
+    const transformButtons = [
+        createTransformButton(1, midi.slot1.half, 0.5, 'Half'),
+        createTransformButton(1, midi.slot1.double, 2, 'Double'),
+        createTransformButton(2, midi.slot2.half, 0.5, 'Half'),
+        createTransformButton(2, midi.slot2.double, 2, 'Double'),
+    ].filter(Boolean);
     const monitorButton = { note: midi.monitor.note, channel: midi.monitor.channel };
+    const sourceButtons = (midi.captureSources || [])
+        .map((control, index) => {
+            const source = runtimeConfig.audio.captureSources[index];
+            return source ? { ...control, sourceId: source.id, label: source.label } : null;
+        })
+        .filter(Boolean);
 
     function setLED(target, on) {
         if (!output) return;
@@ -161,19 +182,33 @@ function setupMidiHandlers(input, output) {
     controller = createController({
         transport,
         config: runtimeConfig.controller,
+        tempo,
+        inputSources: runtimeConfig.audio.captureSources,
+        inputRouter: runtimeConfig.platform === 'linux' && runtimeConfig.audio.mode === 'jack'
+            ? new JackCaptureRouter()
+            : null,
         onStateChange: (state) => {
             for (const slotState of state.slots) {
                 const buttonSlot = buttonSlots.find((slot) => slot.id === slotState.id);
                 if (buttonSlot) {
-                    setLED(buttonSlot, slotState.state === SlotState.RECORDING || slotState.state === SlotState.PLAYING);
+                    setLED(buttonSlot, [SlotState.PENDING, SlotState.RECORDING, SlotState.PLAYING].includes(slotState.state));
                 }
             }
             setLED(monitorButton, state.monitorEnabled);
+            for (const sourceButton of sourceButtons) {
+                setLED(sourceButton, state.inputRouting.selectedSourceId === sourceButton.sourceId);
+            }
         },
     });
 
     buttonSlots.forEach((slot) => setLED(slot, false));
     setLED(monitorButton, false);
+    sourceButtons.forEach((button) => setLED(button, controller.getState().inputRouting.selectedSourceId === button.sourceId));
+
+    input.on('clock', () => midiClock.tick());
+    input.on('start', () => midiClock.reset());
+    input.on('continue', () => midiClock.reset());
+    input.on('stop', () => midiClock.reset());
 
     input.on('noteon', (msg) => {
         if (msg.note === monitorButton.note && msg.channel === monitorButton.channel && msg.velocity > 0) {
@@ -182,6 +217,29 @@ function setupMidiHandlers(input, output) {
         }
 
         if (msg.velocity > 0) {
+            if (midi.tapTempo && msg.note === midi.tapTempo.note && msg.channel === midi.tapTempo.channel) {
+                handleTapTempo();
+                return;
+            }
+
+            const sourceButton = sourceButtons.find((button) => button.note === msg.note && button.channel === msg.channel);
+            if (sourceButton) {
+                handleInputSource(sourceButton);
+                return;
+            }
+
+            const autoLoop = autoLoopButtons.find((button) => button.note === msg.note && button.channel === msg.channel);
+            if (autoLoop) {
+                handleAutoLoop(autoLoop);
+                return;
+            }
+
+            const transform = transformButtons.find((button) => button.note === msg.note && button.channel === msg.channel);
+            if (transform) {
+                handleTransform(transform);
+                return;
+            }
+
             if (msg.note === midi.encoderPress1.note && msg.channel === midi.encoderPress1.channel) {
                 handleEncoderPress(1);
                 return;
@@ -234,6 +292,26 @@ function setupMidiHandlers(input, output) {
         if (slotId) handleEncoder(slotId, msg.value, target);
     });
 
+    function createAutoLoopButtons(slotId, autoLoops = {}) {
+        return Object.entries(autoLoops).map(([durationKey, control]) => ({
+            id: slotId,
+            durationKey,
+            note: control.note,
+            channel: control.channel,
+        }));
+    }
+
+    function createTransformButton(slotId, control, factor, label) {
+        if (!control) return null;
+        return {
+            id: slotId,
+            note: control.note,
+            channel: control.channel,
+            factor,
+            label,
+        };
+    }
+
     function handleRelease(slot) {
         if (slot.holdTimer) {
             clearTimeout(slot.holdTimer);
@@ -280,6 +358,36 @@ function setupMidiHandlers(input, output) {
         console.log(`[Monitor] ${controller.getState().monitorEnabled ? 'ON' : 'OFF'}`);
     }
 
+    function handleTapTempo() {
+        tapTempo.tap(Date.now());
+        const bpm = tapTempo.getBpm();
+        console.log(`[Tempo] Tap${bpm ? ` ${bpm.toFixed(1)} BPM` : ''}`);
+    }
+
+    function handleAutoLoop(button) {
+        controller.autoLoopSlot(button.id, button.durationKey)
+            .then((result) => {
+                if (!result.ok) {
+                    console.log(`[Slot ${button.id}] auto ${button.durationKey}: ${result.reason}`);
+                    return;
+                }
+                console.log(`[Slot ${button.id}] auto ${button.durationKey}: ${Math.round(result.durationMs)}ms (${result.source})`);
+            })
+            .catch((err) => console.error(err.message));
+    }
+
+    function handleTransform(button) {
+        controller.multiplySlotLength(button.id, button.factor)
+            .then((result) => {
+                if (!result.ok) {
+                    console.log(`[Slot ${button.id}] ${button.label}: ${result.reason}`);
+                    return;
+                }
+                console.log(`[Slot ${button.id}] ${button.label}: ${Math.round(result.durationMs)}ms`);
+            })
+            .catch((err) => console.error(err.message));
+    }
+
     function handleClear(buttonSlot) {
         console.log(`[Slot ${buttonSlot.id}] CLEARED (Hold ${runtimeConfig.controller.holdThresholdMs}ms)`);
         controller.clearSlot(buttonSlot.id)
@@ -300,6 +408,10 @@ function setupMidiHandlers(input, output) {
             .catch((err) => console.error(err.message));
     }
 
+    function formatNoteControl(control) {
+        return `Ch${control.channel} N${control.note}`;
+    }
+
     console.log('');
     console.log('Controls (Runtime MIDI Values):');
     console.log(`  TAP           : [S1: Ch${midi.slot1.channel} N${midi.slot1.note}] [S2: Ch${midi.slot2.channel} N${midi.slot2.note}] -> Record/Play/Stop`);
@@ -311,8 +423,26 @@ function setupMidiHandlers(input, output) {
         console.log(`  START ENCODER : [S1: ${s1}] [S2: ${s2}] -> Adjust Loop Start`);
     }
     console.log(`  ENCODER PRESS : [S1: Ch${midi.encoderPress1.channel} N${midi.encoderPress1.note}] [S2: Ch${midi.encoderPress2.channel} N${midi.encoderPress2.note}] -> Reset Length`);
+    if (autoLoopButtons.length > 0) {
+        console.log(`  AUTO LOOP     : ${autoLoopButtons.map((button) => `[S${button.id} ${button.durationKey}: ${formatNoteControl(button)}]`).join(' ')}`);
+    }
+    if (transformButtons.length > 0) {
+        console.log(`  HALF/DOUBLE   : ${transformButtons.map((button) => `[S${button.id} ${button.label}: ${formatNoteControl(button)}]`).join(' ')}`);
+    }
+    if (midi.tapTempo) {
+        console.log(`  TAP TEMPO     : ${formatNoteControl(midi.tapTempo)}`);
+    }
+    if (sourceButtons.length > 0) {
+        console.log(`  INPUT SOURCE  : ${sourceButtons.map((button) => `[${button.label}: ${formatNoteControl(button)}]`).join(' ')}`);
+    }
     console.log(`  MONITOR       : Ch${midi.monitor.channel} N${midi.monitor.note} -> Toggle (mutes when loop plays)`);
     console.log('');
+}
+
+function handleInputSource(button) {
+    controller.selectInputSource(button.sourceId)
+        .then(() => console.log(`[Input] ${button.label}`))
+        .catch((err) => console.error(err.message));
 }
 
 process.on('uncaughtException', (err) => {

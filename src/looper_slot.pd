@@ -5,7 +5,7 @@
 #X obj 438 1033 outlet~;
 #X obj 13 45 inlet~;
 #X obj 563 1033 outlet;
-#X obj 13 510 array define \$1_data 960000;
+#X obj 13 510 array define \$1_data 1968000;
 #X f 25;
 #X obj 169 137 sel 1 0;
 #X obj 203 202 t b b;
@@ -15,7 +15,7 @@
 #X msg 250 268 stop;
 #X obj 736 344 +;
 #X obj 736 302 f;
-#X obj 673 385 clip 100 30000;
+#X obj 673 385 clip 100 41000;
 #X obj 673 516 f;
 #X obj 737 135 t b f;
 #X text 169 103 RECORDING;
@@ -60,7 +60,7 @@
 #X text 458 680 play pos;
 #X obj 210 767 oscformat /state;
 #X obj 523 708 phasor~;
-#X obj 13 551 array define \$1_data_R 960000;
+#X obj 13 551 array define \$1_data_R 1968000;
 #X f 26;
 #X obj 77 386 tabwrite~ \$1_data_R;
 #X obj 673 540 print PENDING_LENGTH;
@@ -77,7 +77,7 @@
 #X text 826 266 original length;
 #X text 777 343 current length + crop;
 #X text 673 404 clipped length output fed back to \; right input of current length \; so crop is saved to current length \; making crop cumulative;
-#X obj 342 23 route rec play crop cropStart reset clear;
+#X obj 342 23 route rec play crop cropStart reset clear setLength;
 #X obj 306 129 sel 1;
 #X obj 306 155 t b b b;
 #X text 306 103 CLEAR INPUT;
@@ -87,13 +87,13 @@
 #X text 673 495 PLAY SIGNAL LENGTH;
 #X text 346 233 clearing all state;
 #X msg 286 268 stop;
-#X obj 250 300 del 2000;
+#X obj 250 300 del 21000;
 #X obj 13 90 delwrite~ \$1_pre_L 1000;
 #X obj 13 116 delread~ \$1_pre_L 1000;
 #X obj 76 90 delwrite~ \$1_pre_R 1000;
 #X obj 76 116 delread~ \$1_pre_R 1000;
 #X obj 673 430 -;
-#X obj 673 462 clip 100 30000;
+#X obj 673 462 clip 100 41000;
 #X obj 920 135 t b f;
 #X obj 920 171 f;
 #X obj 965 171 +;
@@ -105,6 +105,8 @@
 #X obj 523 807 +~;
 #X obj 382 721 list prepend \$1 start;
 #X obj 620 430 f;
+#X obj 1070 135 t f b;
+#X obj 1070 207 +;
 #X connect 0 0 89 0;
 #X connect 1 0 76 0;
 #X connect 4 0 87 0;
@@ -185,6 +187,7 @@
 #X connect 76 3 93 0;
 #X connect 76 4 21 0;
 #X connect 76 5 77 0;
+#X connect 76 6 104 0;
 #X connect 77 0 78 0;
 #X connect 78 0 65 0;
 #X connect 78 1 81 0;
@@ -224,3 +227,7 @@
 #X connect 101 0 37 0;
 #X connect 102 0 58 0;
 #X connect 103 0 91 0;
+#X connect 104 0 105 0;
+#X connect 104 1 94 0;
+#X connect 94 0 105 1;
+#X connect 105 0 15 0;

@@ -24,3 +24,14 @@ test('dev controller exposes move controls and displays rounded whole millisecon
     assert.match(html, /\$\{signed\(startCrop\)\} ms/);
     assert.match(html, /\$\{signed\(endCrop\)\} ms/);
 });
+
+test('dev controller exposes auto-loop, half, double, and tap tempo controls', () => {
+    assert.match(html, /data-action="autoLoop:1beat"/);
+    assert.match(html, /data-action="autoLoop:2beat"/);
+    assert.match(html, /data-action="autoLoop:4beat"/);
+    assert.match(html, /data-action="autoLoop:2bar"/);
+    assert.match(html, /data-action="half"/);
+    assert.match(html, /data-action="double"/);
+    assert.match(html, /data-action="tapTempo"/);
+    assert.match(html, /Pending/);
+});

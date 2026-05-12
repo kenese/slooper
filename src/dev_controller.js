@@ -4,14 +4,20 @@ const fs = require('fs');
 
 const { getRuntimeConfig } = require('./config');
 const { createController } = require('./controller/slot_controller');
+const { JackCaptureRouter } = require('./controller/jack_capture_router');
 const { OscTransport } = require('./controller/osc_transport');
+const { TapTempoTracker, TempoSource } = require('./controller/tempo');
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.SLOOPER_WEB_PORT || 3000);
 const htmlPath = path.join(__dirname, '..', 'public', 'dev-controller.html');
+const args = process.argv.slice(2);
+const audioArg = args.find((arg) => arg.startsWith('audio-device=') || arg.startsWith('device='));
+const audioConfigArg = args.find((arg) => arg.startsWith('--audio-config='));
 
 const runtimeConfig = getRuntimeConfig({
-    audioDevice: process.env.SLOOPER_AUDIO_DEVICE || 'MAC',
+    audioDevice: audioArg ? audioArg.split('=')[1] : (process.env.SLOOPER_AUDIO_DEVICE || 'MAC'),
+    audioConfigPath: audioConfigArg ? audioConfigArg.split('=')[1] : undefined,
     midiDevice: 'WEB',
 });
 
@@ -19,6 +25,8 @@ runtimeConfig.osc.sendPort = Number(process.env.SLOOPER_OSC_SEND_PORT || runtime
 runtimeConfig.osc.statePort = Number(process.env.SLOOPER_OSC_STATE_PORT || runtimeConfig.osc.statePort);
 
 let controller;
+const tapTempo = new TapTempoTracker();
+const tempo = new TempoSource({ tap: tapTempo });
 const transport = new OscTransport({
     host: runtimeConfig.osc.host,
     sendPort: runtimeConfig.osc.sendPort,
@@ -31,6 +39,11 @@ const transport = new OscTransport({
 controller = createController({
     transport,
     config: runtimeConfig.controller,
+    tempo,
+    inputSources: runtimeConfig.audio.captureSources,
+    inputRouter: runtimeConfig.platform === 'linux' && runtimeConfig.audio.mode === 'jack'
+        ? new JackCaptureRouter()
+        : null,
 });
 
 function readJson(req) {
@@ -65,7 +78,20 @@ async function handleAction(action, slotId) {
         return;
     }
 
+    if (action === 'tapTempo') {
+        tapTempo.tap(Date.now());
+        return;
+    }
+
+    if (action.startsWith('source:')) {
+        await controller.selectInputSource(action.split(':')[1]);
+        return;
+    }
+
     if (action === 'tap') await controller.tapSlot(slotId);
+    else if (action.startsWith('autoLoop:')) await controller.autoLoopSlot(slotId, action.split(':')[1]);
+    else if (action === 'half') await controller.multiplySlotLength(slotId, 0.5);
+    else if (action === 'double') await controller.multiplySlotLength(slotId, 2);
     else if (action === 'clear') await controller.clearSlot(slotId);
     else if (action === 'cropStartDown') await controller.cropStartSlot(slotId, -runtimeConfig.controller.cropStepMs);
     else if (action === 'cropStartUp') await controller.cropStartSlot(slotId, runtimeConfig.controller.cropStepMs);

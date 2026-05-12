@@ -215,7 +215,7 @@ sleep 3
 if [ "$MIDI_DEVICE" = "OSC" ] || [ "$MIDI_DEVICE" = "WEB" ]; then
     echo "Starting OSC web controller..."
     echo "Open http://127.0.0.1:3000"
-    node src/dev_controller.js &
+    node src/dev_controller.js "$@" &
 else
     echo "Starting Node MIDI controller..."
     node src/index.js "$@" &

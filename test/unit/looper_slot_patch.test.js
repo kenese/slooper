@@ -49,7 +49,9 @@ test('rec stop keeps writing delayed input long enough to capture pre-roll and t
 
     const recStopTrigger = findObject(objects, /#X obj \d+ \d+ t b b;/);
     const stopMessage = findObject(objects, /#X msg \d+ \d+ stop;/);
-    const delayedStop = findObject(objects, /#X obj \d+ \d+ del 2000;/);
+    const delayedStop = findObject(objects, /#X obj \d+ \d+ del 21000;/);
+    const leftArray = findObject(objects, /array define \\\$1_data 1968000/);
+    const rightArray = findObject(objects, /array define \\\$1_data_R 1968000/);
     const leftPreWrite = findObject(objects, /delwrite~ \\\$1_pre_L 1000/);
     const leftPreRead = findObject(objects, /delread~ \\\$1_pre_L 1000/);
     const rightPreWrite = findObject(objects, /delwrite~ \\\$1_pre_R 1000/);
@@ -61,7 +63,7 @@ test('rec stop keeps writing delayed input long enough to capture pre-roll and t
 
     assert.ok(
         hasConnection(connections, recStopTrigger, 1, delayedStop, 0),
-        'rec 0 should schedule a 2000ms delayed tabwrite stop'
+        'rec 0 should schedule a 21000ms delayed tabwrite stop'
     );
     assert.ok(
         hasConnection(connections, delayedStop, 0, stopMessage, 0),
@@ -76,12 +78,14 @@ test('rec stop keeps writing delayed input long enough to capture pre-roll and t
     assert.ok(hasConnection(connections, leftPreRead, 0, leftTabwrite, 0));
     assert.ok(hasConnection(connections, rightInput, 0, rightPreWrite, 0));
     assert.ok(hasConnection(connections, rightPreRead, 0, rightTabwrite, 0));
+    assert.ok(leftArray >= 0);
+    assert.ok(rightArray >= 0);
 });
 
 test('patch exposes cropStart control and offsets playback by pre-roll plus start crop', () => {
     const { objects, connections } = parsePatch();
 
-    const route = findObject(objects, /route rec play crop cropStart reset clear/);
+    const route = findObject(objects, /route rec play crop cropStart reset clear setLength/);
     const startState = findObject(objects, /list prepend \\\$1 start/);
     const offsetBase = findObject(objects, /#X obj \d+ \d+ \+ 1000;/);
     const offsetSignal = findObject(objects, /#X obj \d+ \d+ sig~;/);
@@ -106,4 +110,42 @@ test('patch exposes cropStart control and offsets playback by pre-roll plus star
     assert.ok(hasConnection(connections, positionScale, 0, playbackOffset, 0));
     assert.ok(hasConnection(connections, playbackOffset, 0, leftTabread, 0));
     assert.ok(hasConnection(connections, playbackOffset, 0, rightTabread, 0));
+});
+
+test('patch exposes setLength control and emits effective length state', () => {
+    const { objects, connections } = parsePatch();
+
+    const route = findObject(objects, /route rec play crop cropStart reset clear setLength/);
+    const setLengthTrigger = findObject(objects, /#X obj \d+ \d+ t f b;/);
+    const setLengthAdd = findObject(objects, /#X obj 1070 207 \+;/);
+    const currentEndClip = findObject(objects, /#X obj 673 385 clip 100 41000;/);
+    const currentEnd = findObject(objects, /#X obj 736 302 f;/);
+    const startOffsetMemory = findObject(objects, /#X obj 920 171 f;/);
+    const lengthState = findObject(objects, /list prepend \\\$1 length/);
+
+    assert.ok(
+        hasConnection(connections, route, 6, setLengthTrigger, 0),
+        'setLength route outlet should feed setLength trigger'
+    );
+    assert.ok(
+        hasConnection(connections, setLengthTrigger, 1, startOffsetMemory, 0),
+        'setLength should bang the current start offset before applying length'
+    );
+    assert.ok(hasConnection(connections, startOffsetMemory, 0, setLengthAdd, 1));
+    assert.ok(
+        hasConnection(connections, setLengthTrigger, 0, setLengthAdd, 0),
+        'requested effective length should feed + left inlet'
+    );
+    assert.ok(
+        hasConnection(connections, setLengthAdd, 0, currentEndClip, 0),
+        'setLength should update current end length through the normal end clip'
+    );
+    assert.ok(
+        hasConnection(connections, currentEndClip, 0, currentEnd, 1),
+        'setLength result should update current end length state'
+    );
+    assert.ok(
+        connections.some((connection) => connection.target === lengthState),
+        'setLength should reuse length state output'
+    );
 });

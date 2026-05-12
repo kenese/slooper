@@ -25,6 +25,57 @@ test('linux XONE uses tracked engine patch and JACK hardware port mapping', () =
     assert.equal(config.audio.jackCardNameIncludes, 'XONE');
 });
 
+test('audio configs can expose multiple named JACK capture source pairs', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-audio-sources-'));
+    const file = path.join(dir, 'sources.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Multi Source',
+        mode: 'jack',
+        jack: {
+            cardNameIncludes: 'Multi',
+            capturePortPairs: [
+                { id: 'ch2', label: 'Channel 2', ports: ['system:capture_3', 'system:capture_4'] },
+                { id: 'ch3', label: 'Channel 3', ports: ['system:capture_5', 'system:capture_6'] },
+            ],
+            playbackPorts: ['system:playback_1', 'system:playback_2'],
+        },
+        pd: {
+            darwin: { adc: [1, 2], dac: [1, 2] },
+            linux: { adc: [1, 2], dac: [1, 2] },
+        },
+    }));
+
+    const config = getRuntimeConfig({
+        audioConfigPath: file,
+        midiDevice: 'WEB',
+        platform: 'linux',
+        projectRoot: path.join(__dirname, '../..'),
+    });
+
+    assert.deepEqual(config.audio.capturePorts, ['system:capture_3', 'system:capture_4']);
+    assert.deepEqual(config.audio.captureSources, [
+        { id: 'ch2', label: 'Channel 2', ports: ['system:capture_3', 'system:capture_4'] },
+        { id: 'ch3', label: 'Channel 3', ports: ['system:capture_5', 'system:capture_6'] },
+    ]);
+});
+
+test('single legacy JACK capture pair is exposed as send mode source', () => {
+    const config = getRuntimeConfig({
+        audioDevice: 'Z1',
+        midiDevice: 'WEB',
+        platform: 'linux',
+        projectRoot: path.join(__dirname, '../..'),
+    });
+
+    assert.deepEqual(config.audio.captureSources, [
+        {
+            id: 'capture-1',
+            label: 'Capture 1',
+            ports: ['system:capture_1', 'system:capture_2'],
+        },
+    ]);
+});
+
 test('loads explicit JSON audio and MIDI config files', () => {
     const config = getRuntimeConfig({
         audioConfigPath: path.join(__dirname, '../../config/audio/xone-px5.json'),
@@ -172,6 +223,102 @@ test('loads optional start crop encoder controls when configured', () => {
     assert.equal(config.midi.slot1.startEncoderChannel, 0);
     assert.equal(config.midi.slot2.startEncoderCC, 13);
     assert.equal(config.midi.slot2.startEncoderChannel, 1);
+});
+
+test('loads optional auto-loop, half, double, and tap note controls when configured', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-auto-loop-'));
+    const file = path.join(dir, 'auto-loop.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Auto Loop MIDI',
+        match: 'Auto Loop',
+        controls: {
+            slot1Button: { type: 'note', note: 1, channel: 0 },
+            slot2Button: { type: 'note', note: 2, channel: 0 },
+            slot1Encoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+            slot2Encoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
+            slot1Reset: { type: 'note', note: 3, channel: 0 },
+            slot2Reset: { type: 'note', note: 4, channel: 0 },
+            monitorButton: { type: 'note', note: 5, channel: 0 },
+            slot1AutoLoop1Beat: { type: 'note', note: 20, channel: 0 },
+            slot1AutoLoop2Beat: { type: 'note', note: 21, channel: 0 },
+            slot1AutoLoop4Beat: { type: 'note', note: 22, channel: 0 },
+            slot1AutoLoop2Bar: { type: 'note', note: 23, channel: 0 },
+            slot2AutoLoop1Beat: { type: 'note', note: 24, channel: 1 },
+            slot2AutoLoop2Beat: { type: 'note', note: 25, channel: 1 },
+            slot2AutoLoop4Beat: { type: 'note', note: 26, channel: 1 },
+            slot2AutoLoop2Bar: { type: 'note', note: 27, channel: 1 },
+            slot1Half: { type: 'note', note: 30, channel: 0 },
+            slot1Double: { type: 'note', note: 31, channel: 0 },
+            slot2Half: { type: 'note', note: 32, channel: 1 },
+            slot2Double: { type: 'note', note: 33, channel: 1 },
+            tapTempo: { type: 'note', note: 40, channel: 0 },
+        },
+    }));
+
+    const config = getRuntimeConfig({
+        midiConfigPath: file,
+        audioDevice: 'MAC',
+        projectRoot: path.join(__dirname, '../..'),
+    });
+
+    assert.deepEqual(config.midi.slot1.autoLoops['1beat'], { note: 20, channel: 0 });
+    assert.deepEqual(config.midi.slot1.autoLoops['2beat'], { note: 21, channel: 0 });
+    assert.deepEqual(config.midi.slot1.autoLoops['4beat'], { note: 22, channel: 0 });
+    assert.deepEqual(config.midi.slot1.autoLoops['2bar'], { note: 23, channel: 0 });
+    assert.deepEqual(config.midi.slot2.autoLoops['1beat'], { note: 24, channel: 1 });
+    assert.deepEqual(config.midi.slot2.autoLoops['2bar'], { note: 27, channel: 1 });
+    assert.deepEqual(config.midi.slot1.half, { note: 30, channel: 0 });
+    assert.deepEqual(config.midi.slot1.double, { note: 31, channel: 0 });
+    assert.deepEqual(config.midi.slot2.half, { note: 32, channel: 1 });
+    assert.deepEqual(config.midi.slot2.double, { note: 33, channel: 1 });
+    assert.deepEqual(config.midi.tapTempo, { note: 40, channel: 0 });
+});
+
+test('loads optional capture source MIDI note controls when configured', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-capture-source-'));
+    const file = path.join(dir, 'capture-source.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Capture Source MIDI',
+        match: 'Capture Source',
+        controls: {
+            slot1Button: { type: 'note', note: 1, channel: 0 },
+            slot2Button: { type: 'note', note: 2, channel: 0 },
+            slot1Encoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+            slot2Encoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
+            slot1Reset: { type: 'note', note: 3, channel: 0 },
+            slot2Reset: { type: 'note', note: 4, channel: 0 },
+            monitorButton: { type: 'note', note: 5, channel: 0 },
+            captureSource1: { type: 'note', note: 50, channel: 0 },
+            captureSource2: { type: 'note', note: 51, channel: 0 },
+        },
+    }));
+
+    const config = getRuntimeConfig({
+        midiConfigPath: file,
+        audioDevice: 'MAC',
+        projectRoot: path.join(__dirname, '../..'),
+    });
+
+    assert.deepEqual(config.midi.captureSources, [
+        { note: 50, channel: 0 },
+        { note: 51, channel: 0 },
+    ]);
+});
+
+test('optional auto-loop controls are absent when not configured', () => {
+    const config = getRuntimeConfig({
+        audioDevice: 'MAC',
+        midiDevice: 'XONE',
+        platform: 'darwin',
+        projectRoot: path.join(__dirname, '../..'),
+    });
+
+    assert.deepEqual(config.midi.slot1.autoLoops, {});
+    assert.deepEqual(config.midi.slot2.autoLoops, {});
+    assert.equal(config.midi.slot1.half, undefined);
+    assert.equal(config.midi.slot2.double, undefined);
+    assert.equal(config.midi.tapTempo, undefined);
+    assert.deepEqual(config.midi.captureSources, []);
 });
 
 test('runtime_config parses explicit config path arguments', () => {

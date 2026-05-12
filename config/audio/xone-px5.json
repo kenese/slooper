@@ -6,7 +6,23 @@
     "sampleRate": 48000,
     "periodSize": 128,
     "periods": 2,
-    "capturePorts": ["system:capture_9", "system:capture_10"],
+    "capturePortPairs": [
+      {
+        "id": "main",
+        "label": "PX5 Send",
+        "ports": ["system:capture_9", "system:capture_10"]
+      },
+      {
+        "id": "ch2",
+        "label": "PX5 Channel 2",
+        "ports": ["system:capture_3", "system:capture_4"]
+      },
+      {
+        "id": "ch3",
+        "label": "PX5 Channel 3",
+        "ports": ["system:capture_5", "system:capture_6"]
+      }
+    ],
     "playbackPorts": ["system:playback_1", "system:playback_2"]
   },
   "pd": {

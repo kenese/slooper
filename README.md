@@ -11,8 +11,10 @@ Currently hardcoded to support the following but should work with any usb midi d
   - **Audio Interfaces**: Allen & Heath PX5 and Traktor Z1.
 - **Loop Management**:
   - **Record/Play**: Seamless recording and playback states.
+  - **Auto Loops**: Optional per-slot buttons can create or snap loops to 1 beat, 2 beats, 4 beats, or 2 bars using MIDI clock when present, or tap tempo as a fallback.
+  - **Half/Double**: Optional per-slot buttons halve or double the current effective loop length while preserving the current start point.
   - **Clear**: Hold button for 500ms to clear a slot.
-  - **Crop/Extend**: Rotate encoders to adjust loop start and loop end in real-time. 1 second of audio is captured before and after the original loop so you can extend either edge without silence.
+  - **Crop/Extend**: Rotate encoders to adjust loop start and loop end in real-time. 1 second of audio is captured before the original loop and 20 seconds of tail audio is captured after record stop so you can extend loop ends without silence.
   - **Reset**: Press encoder to reset loop start/end crops to the original recording.
 - **Audio Processing**:
   - **Glitch-Free Looping**: Trapezoidal amplitude windowing to prevent clicks at loop points.
@@ -71,7 +73,7 @@ BlackHole 2ch + MacBook Speakers/headphones
 
 Then set macOS output to that Multi-Output Device, while Pd input stays set to **BlackHole 2ch**.
 
-The web controller has the basic hardware-style controls for both slots: record/play/stop/resume, clear, start crop down/up, end crop down/up, reset, and monitor toggle. It sends OSC directly to Pure Data on `127.0.0.1:9000`.
+The web controller has the basic hardware-style controls for both slots: record/play/stop/resume, auto-loop lengths, half/double, clear, start crop down/up, end crop down/up, reset, tap tempo, and monitor toggle. It sends OSC directly to Pure Data on `127.0.0.1:9000`.
 
 ### Raspberry Pi / Patchbox OS
 
@@ -168,7 +170,7 @@ src/engine.pd
 looper_slot inlets:
   1. left audio signal
   2. right audio signal
-  3. control messages: rec, play, crop, cropStart, reset, clear
+  3. control messages: rec, play, crop, cropStart, reset, clear, setLength
 
 looper_slot outlets:
   1. left loop signal
@@ -185,7 +187,7 @@ $1_data_R
 
 That means `[looper_slot slot1]` uses `slot1_data`/`slot1_data_R`, while `[looper_slot slot2]` uses `slot2_data`/`slot2_data_R`.
 
-Each slot also keeps a 1 second input delay and writes delayed input into the slot array while recording. Recording stops 2 seconds after `rec 0`, which gives the slot 1 second of audio before the official start and 1 second after the official end.
+Each slot also keeps a 1 second input delay and writes delayed input into the slot array while recording. Recording stops 21 seconds after `rec 0`, which gives the slot 1 second of audio before the official start and 20 seconds after the official end. At 48kHz the stereo arrays are sized for 41 seconds, which is about 31MB total for the two default slots plus Pd overhead.
 
 Length handling inside `looper_slot.pd` has four separate memories:
 
@@ -193,8 +195,9 @@ Length handling inside `looper_slot.pd` has four separate memories:
 - **Current end length**: updated by end crop deltas and restored from original on reset.
 - **Start crop offset**: updated by `cropStart` deltas and clipped to +/-1000ms.
 - **Playback length**: current end length minus start crop offset; drives phasor speed, sample position, anti-click window, debug/state length output.
+- **Set length**: `setLength <ms>` preserves the current start crop offset and updates the current end length so the effective playback length matches the requested value, clipped to the safe playback range.
 
-`rec 0`, `crop`, `cropStart`, `reset`, and `clear` emit `/state slotX length ...`. `cropStart` also emits `/state slotX start ...`. `play` emits only `playing`/`paused` state.
+`rec 0`, `crop`, `cropStart`, `reset`, `setLength`, and `clear` emit `/state slotX length ...`. `cropStart` also emits `/state slotX start ...`. `play` emits only `playing`/`paused` state.
 
 To add another slot later, the expected Pd work is:
 
@@ -286,6 +289,11 @@ To add a new MIDI controller, copy `config/midi/example.json` and update the `ma
 - `slot1Reset`
 - `slot2Reset`
 - `monitorButton`
+- `slot1AutoLoop1Beat` / `slot1AutoLoop2Beat` / `slot1AutoLoop4Beat` / `slot1AutoLoop2Bar` (optional note buttons)
+- `slot2AutoLoop1Beat` / `slot2AutoLoop2Beat` / `slot2AutoLoop4Beat` / `slot2AutoLoop2Bar` (optional note buttons)
+- `slot1Half` / `slot1Double` / `slot2Half` / `slot2Double` (optional note buttons)
+- `tapTempo` (optional note button used when MIDI clock is not active)
+- `captureSource1`, `captureSource2`, ... (optional note buttons, mapped in order to configured capture source pairs)
 
 Use the MIDI logger to discover values:
 
@@ -293,7 +301,11 @@ Use the MIDI logger to discover values:
 npm run midi:log
 ```
 
-To add a new class-compliant audio interface, copy `config/audio/generic-jack-1-2.json`. On Linux/Pi with JACK, keep Pd on logical `adc~ 1 2` and `dac~ 1 2`; set `jack.capturePorts` and `jack.playbackPorts` to map the hardware channels. On macOS/native Pd, use the `pd.darwin.adc` and `pd.darwin.dac` arrays for direct channel selection in the generated runtime patch.
+To add a new class-compliant audio interface, copy `config/audio/generic-jack-1-2.json`. On Linux/Pi with JACK, keep Pd on logical `adc~ 1 2` and `dac~ 1 2`; set `jack.capturePorts` and `jack.playbackPorts` to map the hardware channels. For multiple selectable input sources, use `jack.capturePortPairs`, where each entry has `id`, `label`, and stereo `ports`; the first entry is connected at startup, and web/MIDI source selection rewires JACK into `pure_data:input_1/2`. On macOS/native Pd, use the `pd.darwin.adc` and `pd.darwin.dac` arrays for direct channel selection in the generated runtime patch.
+
+When only one capture pair is configured, the web controller shows **Send Mode** because source selection still happens outside Slooper. When multiple pairs are configured, it shows **Switching** and renders one source button per pair.
+
+Future routing idea: investigate a mode where each capture source owns one or two dedicated looper slots, so the user does not need to choose an input before recording. That would also need distinct output/playback routing per source, so each capture channel returns to its own playback channel pair.
 
 **Play Mode (Resume Behavior):**
 

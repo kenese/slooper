@@ -63,7 +63,8 @@
         }
 
         .slot,
-        .transport {
+        .transport,
+        .input-routing {
             border: 1px solid var(--line);
             border-radius: 8px;
             background: var(--panel);
@@ -95,6 +96,7 @@
             text-align: center;
         }
 
+        .pill.pending,
         .pill.playing,
         .pill.recording {
             color: #07120e;
@@ -172,9 +174,33 @@
             min-width: 180px;
         }
 
+        .input-routing {
+            margin-bottom: 14px;
+        }
+
+        .input-routing-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .source-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 8px;
+        }
+
+        button.selected {
+            background: var(--accent);
+            color: #07120e;
+        }
+
         @media (max-width: 720px) {
             header,
-            .transport {
+            .transport,
+            .input-routing-head {
                 align-items: stretch;
                 flex-direction: column;
             }
@@ -200,6 +226,8 @@
         <div class="status" id="connection">Connecting...</div>
     </header>
 
+    <section class="input-routing" id="input-routing"></section>
+
     <section class="grid" id="slots"></section>
 
     <section class="transport">
@@ -208,11 +236,12 @@
             <div class="status" id="monitor-status">Off</div>
         </div>
         <button id="monitor-button" type="button">Toggle Monitor</button>
+        <button type="button" data-action="tapTempo">Tap Tempo</button>
     </section>
 </main>
 
 <script>
-    const stateNames = ['Empty', 'Recording', 'Playing', 'Stopped'];
+    const stateNames = ['Empty', 'Recording', 'Playing', 'Stopped', 'Pending'];
     let appState = null;
 
     async function request(path, options = {}) {
@@ -242,6 +271,7 @@
         if (slot.state === 0) return 'Record';
         if (slot.state === 1) return 'Stop Rec + Play';
         if (slot.state === 2) return 'Stop';
+        if (slot.state === 4) return 'Pending';
         return 'Resume';
     }
 
@@ -271,6 +301,12 @@
                 </div>
                 <div class="controls">
                     <button class="primary" type="button" data-action="tap" data-slot="${slot.id}">${tapLabel(slot)}</button>
+                    <button type="button" data-action="autoLoop:1beat" data-slot="${slot.id}">1 Beat</button>
+                    <button type="button" data-action="autoLoop:2beat" data-slot="${slot.id}">2 Beat</button>
+                    <button type="button" data-action="autoLoop:4beat" data-slot="${slot.id}">4 Beat</button>
+                    <button type="button" data-action="autoLoop:2bar" data-slot="${slot.id}">2 Bar</button>
+                    <button type="button" data-action="half" data-slot="${slot.id}">Half</button>
+                    <button type="button" data-action="double" data-slot="${slot.id}">Double</button>
                     <button type="button" data-action="cropStartDown" data-slot="${slot.id}">Start -30</button>
                     <button type="button" data-action="cropStartUp" data-slot="${slot.id}">Start +30</button>
                     <button type="button" data-action="cropDown" data-slot="${slot.id}">End -30</button>
@@ -284,8 +320,40 @@
         `;
     }
 
+    function renderInputRouting(inputRouting) {
+        if (!inputRouting || inputRouting.sources.length === 0) {
+            return '';
+        }
+
+        const modeLabel = inputRouting.mode === 'switching'
+            ? 'Switching'
+            : 'Send Mode';
+        const selectedSource = inputRouting.sources.find((source) => source.id === inputRouting.selectedSourceId)
+            || inputRouting.sources[0];
+
+        return `
+            <div class="input-routing-head">
+                <div>
+                    <h2>Input Source</h2>
+                    <div class="status">${modeLabel} · ${selectedSource.label}</div>
+                </div>
+                <div class="pill ${inputRouting.mode === 'switching' ? 'playing' : ''}">${modeLabel}</div>
+            </div>
+            <div class="source-buttons">
+                ${inputRouting.sources.map((source) => `
+                    <button
+                        type="button"
+                        class="${source.id === inputRouting.selectedSourceId ? 'selected' : ''}"
+                        data-action="source:${source.id}"
+                    >${source.label}</button>
+                `).join('')}
+            </div>
+        `;
+    }
+
     function render() {
         if (!appState) return;
+        document.getElementById('input-routing').innerHTML = renderInputRouting(appState.inputRouting);
         document.getElementById('slots').innerHTML = appState.slots.map(renderSlot).join('');
         document.getElementById('monitor-status').textContent =
             appState.monitorEnabled ? (appState.monitorActive ? 'On' : 'Muted while loop plays') : 'Off';

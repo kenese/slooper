@@ -89,6 +89,42 @@ function isPair(value) {
     return Array.isArray(value) && value.length === 2;
 }
 
+function normalizeCaptureSource(source, index) {
+    if (!source || typeof source !== 'object') {
+        throw new Error(`Invalid JACK capturePortPairs entry at index ${index}`);
+    }
+    if (!source.id) {
+        throw new Error(`Missing JACK capture source id at index ${index}`);
+    }
+    if (!isPair(source.ports)) {
+        throw new Error(`Missing JACK capture source ports for ${source.id}`);
+    }
+    return {
+        id: source.id,
+        label: source.label || source.id,
+        ports: source.ports,
+    };
+}
+
+function normalizeCaptureSources(jack) {
+    if (Array.isArray(jack.capturePortPairs)) {
+        if (jack.capturePortPairs.length === 0) {
+            throw new Error('Missing JACK capturePortPairs');
+        }
+        return jack.capturePortPairs.map(normalizeCaptureSource);
+    }
+
+    if (!isPair(jack.capturePorts)) {
+        throw new Error('Missing JACK capturePorts');
+    }
+
+    return [{
+        id: 'capture-1',
+        label: 'Capture 1',
+        ports: jack.capturePorts,
+    }];
+}
+
 function validateAudioConfig(raw) {
     if (!raw.name) {
         throw new Error('Missing audio config name');
@@ -116,9 +152,7 @@ function validateAudioConfig(raw) {
         if (!raw.jack) {
             throw new Error('Missing JACK config');
         }
-        if (!isPair(raw.jack.capturePorts)) {
-            throw new Error('Missing JACK capturePorts');
-        }
+        normalizeCaptureSources(raw.jack);
         if (!isPair(raw.jack.playbackPorts)) {
             throw new Error('Missing JACK playbackPorts');
         }
@@ -130,12 +164,15 @@ function normalizeAudioConfig(raw) {
 
     const jack = raw.jack || {};
     const pd = raw.pd || {};
+    const captureSources = raw.mode === 'jack' || !raw.mode ? normalizeCaptureSources(jack) : [];
+    const capturePorts = captureSources[0] ? captureSources[0].ports : [];
 
     return {
         name: raw.name,
         mode: raw.mode || 'jack',
         jackCardNameIncludes: jack.cardNameIncludes || '',
-        capturePorts: jack.capturePorts || [],
+        capturePorts,
+        captureSources,
         playbackPorts: jack.playbackPorts || [],
         macPdChannels: pd.darwin || { adc: [1, 2], dac: [1, 2] },
         linuxPdChannels: pd.linux || { adc: [1, 2], dac: [1, 2] },
@@ -200,9 +237,53 @@ function validateMidiConfig(raw) {
     requireMidiControl(controls, 'slot2Encoder', 'cc');
     optionalMidiControl(controls, 'slot1StartEncoder', 'cc');
     optionalMidiControl(controls, 'slot2StartEncoder', 'cc');
+    optionalMidiControl(controls, 'slot1AutoLoop1Beat', 'note');
+    optionalMidiControl(controls, 'slot1AutoLoop2Beat', 'note');
+    optionalMidiControl(controls, 'slot1AutoLoop4Beat', 'note');
+    optionalMidiControl(controls, 'slot1AutoLoop2Bar', 'note');
+    optionalMidiControl(controls, 'slot2AutoLoop1Beat', 'note');
+    optionalMidiControl(controls, 'slot2AutoLoop2Beat', 'note');
+    optionalMidiControl(controls, 'slot2AutoLoop4Beat', 'note');
+    optionalMidiControl(controls, 'slot2AutoLoop2Bar', 'note');
+    optionalMidiControl(controls, 'slot1Half', 'note');
+    optionalMidiControl(controls, 'slot1Double', 'note');
+    optionalMidiControl(controls, 'slot2Half', 'note');
+    optionalMidiControl(controls, 'slot2Double', 'note');
+    optionalMidiControl(controls, 'tapTempo', 'note');
+    Object.keys(controls)
+        .filter((name) => /^captureSource[0-9]+$/.test(name))
+        .forEach((name) => optionalMidiControl(controls, name, 'note'));
     requireMidiControl(controls, 'slot1Reset', 'note');
     requireMidiControl(controls, 'slot2Reset', 'note');
     requireMidiControl(controls, 'monitorButton', 'note');
+}
+
+function normalizeNoteControl(control) {
+    return control ? { note: control.note, channel: control.channel } : undefined;
+}
+
+function normalizeAutoLoopControls(controls, slotPrefix) {
+    const mappings = [
+        ['1beat', `${slotPrefix}AutoLoop1Beat`],
+        ['2beat', `${slotPrefix}AutoLoop2Beat`],
+        ['4beat', `${slotPrefix}AutoLoop4Beat`],
+        ['2bar', `${slotPrefix}AutoLoop2Bar`],
+    ];
+
+    return mappings.reduce((autoLoops, [durationKey, controlName]) => {
+        const normalized = normalizeNoteControl(controls[controlName]);
+        if (normalized) {
+            autoLoops[durationKey] = normalized;
+        }
+        return autoLoops;
+    }, {});
+}
+
+function normalizeCaptureSourceControls(controls) {
+    return Object.keys(controls)
+        .filter((name) => /^captureSource[0-9]+$/.test(name))
+        .sort((a, b) => Number(a.replace('captureSource', '')) - Number(b.replace('captureSource', '')))
+        .map((name) => normalizeNoteControl(controls[name]));
 }
 
 function normalizeMidiConfig(raw) {
@@ -233,6 +314,9 @@ function normalizeMidiConfig(raw) {
             startEncoderCC: slot1StartEncoder.controller,
             startEncoderChannel: slot1StartEncoder.channel,
             startEncoderMode: slot1StartEncoder.mode,
+            autoLoops: normalizeAutoLoopControls(controls, 'slot1'),
+            half: normalizeNoteControl(controls.slot1Half),
+            double: normalizeNoteControl(controls.slot1Double),
         },
         slot2: {
             note: controls.slot2Button.note,
@@ -243,6 +327,9 @@ function normalizeMidiConfig(raw) {
             startEncoderCC: slot2StartEncoder.controller,
             startEncoderChannel: slot2StartEncoder.channel,
             startEncoderMode: slot2StartEncoder.mode,
+            autoLoops: normalizeAutoLoopControls(controls, 'slot2'),
+            half: normalizeNoteControl(controls.slot2Half),
+            double: normalizeNoteControl(controls.slot2Double),
         },
         monitor: {
             note: controls.monitorButton.note,
@@ -256,6 +343,8 @@ function normalizeMidiConfig(raw) {
             note: controls.slot2Reset.note,
             channel: controls.slot2Reset.channel,
         },
+        tapTempo: normalizeNoteControl(controls.tapTempo),
+        captureSources: normalizeCaptureSourceControls(controls),
     };
 }
 

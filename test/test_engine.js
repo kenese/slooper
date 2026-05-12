@@ -632,6 +632,22 @@ test('slot start crop adjusts playback length and emits start offset', async () 
     assert.ok(Math.abs(trimmedLen - (originalLen + 60)) < 5, `Expected accumulated start crop length ${originalLen + 60}, got ${trimmedLen}`);
 });
 
+test('setLength preserves current start point and emits requested effective length', async () => {
+    await recordLoop('slot1', 500);
+
+    stateMessages = [];
+    await sendOSC('/slot1', 'cropStart', -90);
+    await expectState('slot1', 'start');
+    await expectState('slot1', 'length');
+
+    stateMessages = [];
+    await sendOSC('/slot1', 'setLength', 900);
+    await expectState('slot1', 'length');
+    const setLength = getLastLength('slot1');
+
+    assert.ok(Math.abs(setLength - 900) < 5, `Expected setLength to emit ~900ms, got ${setLength}`);
+});
+
 // --- Clear Tests ---
 
 test('Clear command stops playback and resets slot', async () => {

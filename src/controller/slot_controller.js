@@ -1,13 +1,15 @@
 const { BASE_CONFIG } = require('../config');
+const { getAutoLoopDurationMs } = require('./tempo');
 
 const SlotState = {
     EMPTY: 0,
     RECORDING: 1,
     PLAYING: 2,
     STOPPED: 3,
+    PENDING: 4,
 };
 
-const SlotStateLabel = ['EMPTY', 'RECORDING', 'PLAYING', 'STOPPED'];
+const SlotStateLabel = ['EMPTY', 'RECORDING', 'PLAYING', 'STOPPED', 'PENDING'];
 
 function createSlot(id) {
     return {
@@ -22,6 +24,9 @@ function createSlot(id) {
         pendingStartDelta: 0,
         updateTimer: null,
         startUpdateTimer: null,
+        autoStartTimer: null,
+        autoStopTimer: null,
+        pendingAutoRecord: null,
     };
 }
 
@@ -47,9 +52,15 @@ class SlotController {
         };
         this.onStateChange = options.onStateChange || (() => {});
         this.now = options.now || (() => Date.now());
+        this.setTimeout = options.setTimeout || ((fn, ms) => setTimeout(fn, ms));
+        this.clearTimeout = options.clearTimeout || ((timer) => clearTimeout(timer));
+        this.tempo = options.tempo || null;
         this.slots = (options.slots || [1, 2]).map(createSlot);
         this.monitorEnabled = false;
         this.monitorActive = false;
+        this.inputSources = options.inputSources || [];
+        this.selectedInputSourceId = this.inputSources[0] ? this.inputSources[0].id : null;
+        this.inputRouter = options.inputRouter || null;
     }
 
     setNow(now) {
@@ -83,6 +94,11 @@ class SlotController {
             })),
             monitorEnabled: this.monitorEnabled,
             monitorActive: this.monitorActive,
+            inputRouting: {
+                mode: this.inputSources.length > 1 ? 'switching' : 'send',
+                selectedSourceId: this.selectedInputSourceId,
+                sources: this.inputSources,
+            },
         };
     }
 
@@ -107,6 +123,10 @@ class SlotController {
             await this.send(address, 'rec', 1);
             slot.state = SlotState.RECORDING;
             this.emitChange();
+            return;
+        }
+
+        if (slot.state === SlotState.PENDING) {
             return;
         }
 
@@ -156,13 +176,26 @@ class SlotController {
         slot.pendingDelta = 0;
         slot.pendingStartDelta = 0;
         if (slot.updateTimer) {
-            clearTimeout(slot.updateTimer);
+            this.clearTimeout(slot.updateTimer);
             slot.updateTimer = null;
         }
         if (slot.startUpdateTimer) {
-            clearTimeout(slot.startUpdateTimer);
+            this.clearTimeout(slot.startUpdateTimer);
             slot.startUpdateTimer = null;
         }
+        this.clearAutoTimers(slot);
+    }
+
+    clearAutoTimers(slot) {
+        if (slot.autoStartTimer) {
+            this.clearTimeout(slot.autoStartTimer);
+            slot.autoStartTimer = null;
+        }
+        if (slot.autoStopTimer) {
+            this.clearTimeout(slot.autoStopTimer);
+            slot.autoStopTimer = null;
+        }
+        slot.pendingAutoRecord = null;
     }
 
     async cropSlot(id, delta) {
@@ -227,7 +260,7 @@ class SlotController {
             return;
         }
 
-        slot.updateTimer = setTimeout(async () => {
+        slot.updateTimer = this.setTimeout(async () => {
             const pending = slot.pendingDelta;
             slot.pendingDelta = 0;
             slot.updateTimer = null;
@@ -247,13 +280,113 @@ class SlotController {
             return;
         }
 
-        slot.startUpdateTimer = setTimeout(async () => {
+        slot.startUpdateTimer = this.setTimeout(async () => {
             const pending = slot.pendingStartDelta;
             slot.pendingStartDelta = 0;
             slot.startUpdateTimer = null;
             await this.cropStartSlot(slot.id, pending);
             if (onFlush) onFlush(slot, pending);
         }, this.config.encoderThrottleMs);
+    }
+
+    getTempoTiming() {
+        if (!this.tempo || typeof this.tempo.getTiming !== 'function') {
+            return null;
+        }
+
+        return this.tempo.getTiming(this.now());
+    }
+
+    async autoLoopSlot(id, durationKey) {
+        const slot = this.requireSlot(id);
+        if (slot.state === SlotState.RECORDING) {
+            return { ok: false, reason: 'slot-recording' };
+        }
+        if (slot.state === SlotState.PENDING || slot.pendingAutoRecord) {
+            return { ok: false, reason: 'auto-record-pending' };
+        }
+
+        const timing = this.getTempoTiming();
+        if (!timing || !timing.beatMs) {
+            return { ok: false, reason: 'tempo-unavailable' };
+        }
+
+        const durationMs = getAutoLoopDurationMs(durationKey, timing.beatMs);
+        if (slot.state === SlotState.EMPTY) {
+            return this.scheduleAutoRecord(slot, timing, durationMs);
+        }
+
+        await this.setSlotLength(slot.id, durationMs);
+        return {
+            ok: true,
+            action: 'set-length',
+            source: timing.source,
+            durationMs,
+        };
+    }
+
+    scheduleAutoRecord(slot, timing, durationMs) {
+        const startDelayMs = Math.max(0, Math.round(timing.startTimeMs - this.now()));
+        slot.state = SlotState.PENDING;
+        slot.pendingAutoRecord = {
+            durationMs,
+            source: timing.source,
+            startTimeMs: timing.startTimeMs,
+        };
+        slot.autoStartTimer = this.setTimeout(async () => {
+            slot.autoStartTimer = null;
+            slot.recordStartTime = this.now();
+            slot.cropOffset = 0;
+            slot.startCropOffset = 0;
+            slot.lengthMs = 0;
+            slot.originalLengthMs = 0;
+            await this.send(slotAddress(slot.id), 'rec', 1);
+            slot.state = SlotState.RECORDING;
+            this.emitChange();
+
+            slot.autoStopTimer = this.setTimeout(async () => {
+                slot.autoStopTimer = null;
+                slot.pendingAutoRecord = null;
+                slot.lengthMs = durationMs;
+                slot.originalLengthMs = durationMs;
+                await this.send(slotAddress(slot.id), 'rec', 0);
+                await this.send(slotAddress(slot.id), 'play', 1);
+                slot.state = SlotState.PLAYING;
+                await this.updateMonitorState();
+                this.emitChange();
+            }, durationMs);
+        }, startDelayMs);
+        this.emitChange();
+
+        return {
+            ok: true,
+            action: 'scheduled-record',
+            source: timing.source,
+            durationMs,
+            startDelayMs,
+        };
+    }
+
+    async setSlotLength(id, lengthMs) {
+        const slot = this.requireSlot(id);
+        if (![SlotState.PLAYING, SlotState.STOPPED].includes(slot.state)) {
+            return { ok: false, reason: 'slot-not-ready' };
+        }
+
+        const nextLengthMs = Math.max(100, Math.round(lengthMs));
+        slot.lengthMs = nextLengthMs;
+        await this.send(slotAddress(slot.id), 'setLength', nextLengthMs);
+        this.emitChange();
+        return { ok: true, action: 'set-length', durationMs: nextLengthMs };
+    }
+
+    async multiplySlotLength(id, factor) {
+        const slot = this.requireSlot(id);
+        if (![SlotState.PLAYING, SlotState.STOPPED].includes(slot.state)) {
+            return { ok: false, reason: 'slot-not-ready' };
+        }
+
+        return this.setSlotLength(slot.id, slot.lengthMs * factor);
     }
 
     async resetSlot(id) {
@@ -273,6 +406,25 @@ class SlotController {
         this.monitorEnabled = !this.monitorEnabled;
         await this.updateMonitorState();
         this.emitChange();
+    }
+
+    async selectInputSource(sourceId) {
+        const source = this.inputSources.find((candidate) => candidate.id === sourceId);
+        if (!source) {
+            throw new Error(`Unknown input source: ${sourceId}`);
+        }
+
+        if (source.id === this.selectedInputSourceId) {
+            return { ok: true, action: 'select-input-source', sourceId: source.id };
+        }
+
+        if (this.inputRouter && typeof this.inputRouter.selectSource === 'function') {
+            await this.inputRouter.selectSource(source, this.inputSources);
+        }
+
+        this.selectedInputSourceId = source.id;
+        this.emitChange();
+        return { ok: true, action: 'select-input-source', sourceId: source.id };
     }
 
     async updateMonitorState() {
