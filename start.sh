@@ -101,6 +101,7 @@ force_cleanup() {
     echo "Force cleanup requested. Stopping matching Pd, Node, and JACK processes..."
     pkill -f "node src/index.js" 2>/dev/null || true
     pkill -f "node src/dev_controller.js" 2>/dev/null || true
+    pkill -f "node src/midi_logger.js" 2>/dev/null || true
     pkill -f "pd .*engine.pd" 2>/dev/null || true
     pkill -f "Pd.*engine.pd" 2>/dev/null || true
     pkill jackd 2>/dev/null || true

@@ -32,3 +32,7 @@ test('start.sh parses numeric ALSA card id from aplay output for JACK', () => {
     assert.ok(startScript.includes('sub(/:$/, "", $2); print $2; exit'));
     assert.doesNotMatch(startScript, /sub\(\/\^card \//);
 });
+
+test('start.sh force cleanup stops Slooper MIDI diagnostics that can hold ALSA ports', () => {
+    assert.match(startScript, /pkill -f "node src\/midi_logger\.js" 2>\/dev\/null \|\| true/);
+});
