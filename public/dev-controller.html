@@ -314,7 +314,10 @@
 <script>
     const stateNames = ['Empty', 'Recording', 'Playing', 'Stopped', 'Pending'];
     let appState = null;
-    let lastBeatFlashTime = null;
+    let tempoView = null;
+    let tempoAnimationFrame = null;
+    let beatFlashTimeout = null;
+    let beatFlashOffTimeout = null;
 
     async function request(path, options = {}) {
         const response = await fetch(path, {
@@ -423,6 +426,83 @@
         `;
     }
 
+    function clearTempoTimers() {
+        if (tempoAnimationFrame !== null) {
+            cancelAnimationFrame(tempoAnimationFrame);
+            tempoAnimationFrame = null;
+        }
+
+        if (beatFlashTimeout !== null) {
+            clearTimeout(beatFlashTimeout);
+            beatFlashTimeout = null;
+        }
+
+        if (beatFlashOffTimeout !== null) {
+            clearTimeout(beatFlashOffTimeout);
+            beatFlashOffTimeout = null;
+        }
+    }
+
+    function flashBeatLight() {
+        const light = document.getElementById('beat-light');
+        light.classList.add('clock-flash');
+
+        if (beatFlashOffTimeout !== null) {
+            clearTimeout(beatFlashOffTimeout);
+        }
+
+        beatFlashOffTimeout = setTimeout(() => {
+            light.classList.remove('clock-flash');
+            beatFlashOffTimeout = null;
+        }, 90);
+    }
+
+    function animateTempoProgress() {
+        if (!tempoView) return;
+
+        const beat = document.getElementById('tempo-beat');
+        const bar = document.getElementById('beat-bar-fill');
+        const elapsedBeatMs = (Date.now() - tempoView.beatStartMs) % tempoView.beatMs;
+        const progress = Math.max(0, Math.min(1, elapsedBeatMs / tempoView.beatMs));
+
+        beat.textContent = `${Math.round(progress * 100)}%`;
+        bar.style.width = `${progress * 100}%`;
+        tempoAnimationFrame = requestAnimationFrame(animateTempoProgress);
+    }
+
+    function scheduleBeatFlash(tempo, receivedAtMs = Date.now()) {
+        if (beatFlashTimeout !== null) {
+            clearTimeout(beatFlashTimeout);
+            beatFlashTimeout = null;
+        }
+
+        const beatMs = Number(tempo.beatMs);
+        if (!Number.isFinite(beatMs) || beatMs <= 0) return;
+
+        const progress = Math.max(0, Math.min(1, Number(tempo.beatProgress) || 0));
+        const elapsedBeatMs = progress * beatMs;
+        const beatStartMs = receivedAtMs - elapsedBeatMs;
+        tempoView = { beatMs, beatStartMs };
+
+        function scheduleNextFlash(delayMs) {
+            beatFlashTimeout = setTimeout(() => {
+                flashBeatLight();
+                scheduleNextFlash(beatMs);
+            }, Math.max(0, delayMs));
+        }
+
+        let delayMs = beatMs - elapsedBeatMs;
+        if (delayMs <= 16) {
+            flashBeatLight();
+            delayMs += beatMs;
+        }
+        scheduleNextFlash(delayMs);
+
+        if (tempoAnimationFrame === null) {
+            tempoAnimationFrame = requestAnimationFrame(animateTempoProgress);
+        }
+    }
+
     function renderTempo(tempo) {
         const source = document.getElementById('tempo-source');
         const bpm = document.getElementById('tempo-bpm');
@@ -436,6 +516,8 @@
             beat.textContent = '--';
             bar.style.width = '0%';
             light.classList.remove('clock-flash');
+            tempoView = null;
+            clearTempoTimers();
             return;
         }
 
@@ -445,12 +527,7 @@
         bpm.textContent = Number(tempo.bpm).toFixed(1);
         beat.textContent = `${Math.round(progress * 100)}%`;
         bar.style.width = `${progress * 100}%`;
-
-        if (tempo.lastBeatTimeMs !== lastBeatFlashTime && progress < 0.18) {
-            lastBeatFlashTime = tempo.lastBeatTimeMs;
-            light.classList.add('clock-flash');
-            setTimeout(() => light.classList.remove('clock-flash'), 90);
-        }
+        scheduleBeatFlash(tempo);
     }
 
     function render() {

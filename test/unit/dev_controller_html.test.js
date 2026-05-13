@@ -45,6 +45,13 @@ test('dev controller exposes MIDI clock status and beat flash UI', () => {
     assert.match(html, /clock-flash/);
 });
 
+test('dev controller schedules beat flashes between state polls', () => {
+    assert.match(html, /function scheduleBeatFlash/);
+    assert.match(html, /scheduleNextFlash\(delayMs\)/);
+    assert.match(html, /delayMs = beatMs - elapsedBeatMs/);
+    assert.match(html, /requestAnimationFrame\(animateTempoProgress\)/);
+});
+
 test('dev controller keeps web control mode separate from MIDI clock source', () => {
     const source = fs.readFileSync(path.join(__dirname, '../../src/dev_controller.js'), 'utf8');
 
