@@ -60,3 +60,10 @@ test('dev controller keeps web control mode separate from MIDI clock source', ()
     assert.match(source, /midiDevice: getClockMidiDeviceName\(\)/);
     assert.match(source, /\['WEB', 'OSC'\]\.includes\(requestedMidiDevice\)/);
 });
+
+test('dev controller backs off polling when the server is unreachable', () => {
+    assert.match(html, /let pollFailureCount = 0/);
+    assert.match(html, /function schedulePoll/);
+    assert.match(html, /Math\.min\(5000, 125 \* Math\.pow\(2, pollFailureCount\)\)/);
+    assert.doesNotMatch(html, /setInterval\(\(\) =>/);
+});

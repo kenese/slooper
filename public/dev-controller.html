@@ -318,6 +318,8 @@
     let tempoAnimationFrame = null;
     let beatFlashTimeout = null;
     let beatFlashOffTimeout = null;
+    let pollFailureCount = 0;
+    let pollTimer = null;
 
     async function request(path, options = {}) {
         const response = await fetch(path, {
@@ -550,25 +552,36 @@
 
     document.getElementById('monitor-button').addEventListener('mousedown', () => action('monitor'));
 
-    request('/api/state')
-        .then((state) => {
-            appState = state;
-            render();
-        })
-        .catch((err) => {
-            document.getElementById('connection').textContent = err.message;
-        });
+    function pollState() {
+        if (document.hidden) {
+            schedulePoll(1000);
+            return;
+        }
 
-    setInterval(() => {
         request('/api/state')
             .then((state) => {
+                pollFailureCount = 0;
                 appState = state;
                 render();
+                schedulePoll(125);
             })
             .catch((err) => {
+                pollFailureCount += 1;
                 document.getElementById('connection').textContent = err.message;
+                const delayMs = Math.min(5000, 125 * Math.pow(2, pollFailureCount));
+                schedulePoll(delayMs);
             });
-    }, 125);
+    }
+
+    function schedulePoll(delayMs = 0) {
+        if (pollTimer !== null) {
+            clearTimeout(pollTimer);
+        }
+
+        pollTimer = setTimeout(pollState, delayMs);
+    }
+
+    schedulePoll();
 </script>
 </body>
 </html>
