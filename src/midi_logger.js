@@ -19,3 +19,7 @@ const input = new easymidi.Input(px5Name);
 
 input.on('noteon', (msg) => console.log(`Note ON  | Note: ${msg.note} | Channel: ${msg.channel}`));
 input.on('cc', (msg) => console.log(`Control Change | CC: ${msg.controller} | Val: ${msg.value}`));
+input.on('clock', () => console.log('MIDI Clock tick'));
+input.on('start', () => console.log('MIDI Start'));
+input.on('continue', () => console.log('MIDI Continue'));
+input.on('stop', () => console.log('MIDI Stop'));

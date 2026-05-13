@@ -17,11 +17,29 @@ const audioArg = args.find((arg) => arg.startsWith('audio-device=') || arg.start
 const audioConfigArg = args.find((arg) => arg.startsWith('--audio-config='));
 const midiArg = args.find((arg) => arg.startsWith('midi-device='));
 const midiConfigArg = args.find((arg) => arg.startsWith('--midi-config='));
+const clockMidiArg = args.find((arg) => arg.startsWith('clock-midi-device=') || arg.startsWith('--clock-midi-device='));
+
+function getClockMidiDeviceName() {
+    if (clockMidiArg) {
+        return clockMidiArg.split('=')[1];
+    }
+
+    if (process.env.SLOOPER_MIDI_CLOCK_DEVICE) {
+        return process.env.SLOOPER_MIDI_CLOCK_DEVICE;
+    }
+
+    const requestedMidiDevice = midiArg ? midiArg.split('=')[1] : null;
+    if (requestedMidiDevice && !['WEB', 'OSC'].includes(requestedMidiDevice)) {
+        return requestedMidiDevice;
+    }
+
+    return 'XONE';
+}
 
 const runtimeConfig = getRuntimeConfig({
     audioDevice: audioArg ? audioArg.split('=')[1] : (process.env.SLOOPER_AUDIO_DEVICE || 'MAC'),
     audioConfigPath: audioConfigArg ? audioConfigArg.split('=')[1] : undefined,
-    midiDevice: midiArg ? midiArg.split('=')[1] : (process.env.SLOOPER_MIDI_CLOCK_DEVICE || 'XONE'),
+    midiDevice: getClockMidiDeviceName(),
     midiConfigPath: midiConfigArg ? midiConfigArg.split('=')[1] : undefined,
 });
 

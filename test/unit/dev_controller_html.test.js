@@ -44,3 +44,12 @@ test('dev controller exposes MIDI clock status and beat flash UI', () => {
     assert.match(html, /beatProgress/);
     assert.match(html, /clock-flash/);
 });
+
+test('dev controller keeps web control mode separate from MIDI clock source', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../src/dev_controller.js'), 'utf8');
+
+    assert.match(source, /clockMidiArg/);
+    assert.match(source, /getClockMidiDeviceName/);
+    assert.match(source, /midiDevice: getClockMidiDeviceName\(\)/);
+    assert.match(source, /\['WEB', 'OSC'\]\.includes\(requestedMidiDevice\)/);
+});
