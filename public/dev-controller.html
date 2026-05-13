@@ -13,6 +13,7 @@
             --text: #f3f5f7;
             --muted: #a8b0ba;
             --accent: #55c7a3;
+            --accent-hot: #c7f86f;
             --danger: #f06969;
             --line: #343c47;
         }
@@ -64,7 +65,8 @@
 
         .slot,
         .transport,
-        .input-routing {
+        .input-routing,
+        .tempo {
             border: 1px solid var(--line);
             border-radius: 8px;
             background: var(--panel);
@@ -178,6 +180,57 @@
             margin-bottom: 14px;
         }
 
+        .tempo {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+
+        .beat-light {
+            width: 46px;
+            aspect-ratio: 1;
+            border-radius: 50%;
+            border: 1px solid var(--line);
+            background: var(--panel-soft);
+            box-shadow: inset 0 0 0 8px rgba(255, 255, 255, 0.03);
+        }
+
+        .beat-light.clock-flash {
+            background: var(--accent-hot);
+            border-color: var(--accent-hot);
+            box-shadow: 0 0 22px rgba(199, 248, 111, 0.6);
+        }
+
+        .tempo-readout {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .tempo-readout strong {
+            display: block;
+            color: var(--text);
+            font-size: 16px;
+            margin-top: 2px;
+        }
+
+        .beat-bar {
+            height: 8px;
+            border-radius: 999px;
+            background: var(--panel-soft);
+            overflow: hidden;
+        }
+
+        .beat-bar-fill {
+            width: 0;
+            height: 100%;
+            background: var(--accent);
+        }
+
         .input-routing-head {
             display: flex;
             align-items: center;
@@ -200,9 +253,14 @@
         @media (max-width: 720px) {
             header,
             .transport,
-            .input-routing-head {
+            .input-routing-head,
+            .tempo {
                 align-items: stretch;
                 flex-direction: column;
+            }
+
+            .tempo {
+                display: flex;
             }
 
             .status {
@@ -228,6 +286,19 @@
 
     <section class="input-routing" id="input-routing"></section>
 
+    <section class="tempo" id="tempo-panel">
+        <div class="beat-light" id="beat-light"></div>
+        <div>
+            <h2>Tempo</h2>
+            <div class="beat-bar"><div class="beat-bar-fill" id="beat-bar-fill"></div></div>
+        </div>
+        <div class="tempo-readout">
+            <div>Source<strong id="tempo-source">None</strong></div>
+            <div>BPM<strong id="tempo-bpm">--</strong></div>
+            <div>Beat<strong id="tempo-beat">--</strong></div>
+        </div>
+    </section>
+
     <section class="grid" id="slots"></section>
 
     <section class="transport">
@@ -243,6 +314,7 @@
 <script>
     const stateNames = ['Empty', 'Recording', 'Playing', 'Stopped', 'Pending'];
     let appState = null;
+    let lastBeatFlashTime = null;
 
     async function request(path, options = {}) {
         const response = await fetch(path, {
@@ -351,10 +423,41 @@
         `;
     }
 
+    function renderTempo(tempo) {
+        const source = document.getElementById('tempo-source');
+        const bpm = document.getElementById('tempo-bpm');
+        const beat = document.getElementById('tempo-beat');
+        const light = document.getElementById('beat-light');
+        const bar = document.getElementById('beat-bar-fill');
+
+        if (!tempo || !tempo.active) {
+            source.textContent = 'None';
+            bpm.textContent = '--';
+            beat.textContent = '--';
+            bar.style.width = '0%';
+            light.classList.remove('clock-flash');
+            return;
+        }
+
+        const label = tempo.source === 'midi' ? 'MIDI Clock' : 'Tap';
+        const progress = Math.max(0, Math.min(1, Number(tempo.beatProgress) || 0));
+        source.textContent = label;
+        bpm.textContent = Number(tempo.bpm).toFixed(1);
+        beat.textContent = `${Math.round(progress * 100)}%`;
+        bar.style.width = `${progress * 100}%`;
+
+        if (tempo.lastBeatTimeMs !== lastBeatFlashTime && progress < 0.18) {
+            lastBeatFlashTime = tempo.lastBeatTimeMs;
+            light.classList.add('clock-flash');
+            setTimeout(() => light.classList.remove('clock-flash'), 90);
+        }
+    }
+
     function render() {
         if (!appState) return;
         document.getElementById('input-routing').innerHTML = renderInputRouting(appState.inputRouting);
         document.getElementById('slots').innerHTML = appState.slots.map(renderSlot).join('');
+        renderTempo(appState.tempo);
         document.getElementById('monitor-status').textContent =
             appState.monitorEnabled ? (appState.monitorActive ? 'On' : 'Muted while loop plays') : 'Off';
         document.getElementById('monitor-button').textContent =
@@ -378,6 +481,17 @@
         .catch((err) => {
             document.getElementById('connection').textContent = err.message;
         });
+
+    setInterval(() => {
+        request('/api/state')
+            .then((state) => {
+                appState = state;
+                render();
+            })
+            .catch((err) => {
+                document.getElementById('connection').textContent = err.message;
+            });
+    }, 125);
 </script>
 </body>
 </html>

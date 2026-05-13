@@ -75,6 +75,26 @@ test('getState reports send mode when there is only one capture source', () => {
     });
 });
 
+test('getState includes tempo status when a tempo source is configured', () => {
+    const transport = createFakeTransport();
+    const controller = createController({
+        transport,
+        now: () => 1200,
+        tempo: {
+            getStatus(timeMs) {
+                return { source: 'midi', active: true, bpm: 120, timeMs };
+            },
+        },
+    });
+
+    assert.deepEqual(controller.getState().tempo, {
+        source: 'midi',
+        active: true,
+        bpm: 120,
+        timeMs: 1200,
+    });
+});
+
 test('selectInputSource switches global capture source through the router', async () => {
     const transport = createFakeTransport();
     const selections = [];

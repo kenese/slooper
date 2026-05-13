@@ -99,7 +99,25 @@ class SlotController {
                 selectedSourceId: this.selectedInputSourceId,
                 sources: this.inputSources,
             },
+            tempo: this.getTempoStatus(),
         };
+    }
+
+    getTempoStatus() {
+        if (!this.tempo || typeof this.tempo.getStatus !== 'function') {
+            return {
+                source: 'none',
+                active: false,
+                bpm: null,
+                beatMs: null,
+                beatProgress: 0,
+                lastBeatTimeMs: null,
+                nextBeatTimeMs: null,
+                lastTickAgeMs: null,
+            };
+        }
+
+        return this.tempo.getStatus(this.now());
     }
 
     emitChange() {

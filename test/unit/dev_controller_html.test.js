@@ -35,3 +35,12 @@ test('dev controller exposes auto-loop, half, double, and tap tempo controls', (
     assert.match(html, /data-action="tapTempo"/);
     assert.match(html, /Pending/);
 });
+
+test('dev controller exposes MIDI clock status and beat flash UI', () => {
+    assert.match(html, /id="tempo-panel"/);
+    assert.match(html, /id="tempo-bpm"/);
+    assert.match(html, /id="beat-light"/);
+    assert.match(html, /function renderTempo/);
+    assert.match(html, /beatProgress/);
+    assert.match(html, /clock-flash/);
+});

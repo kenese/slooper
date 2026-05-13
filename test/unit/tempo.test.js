@@ -111,3 +111,46 @@ test('tempo source falls back to tap tempo with immediate start', () => {
         startTimeMs: 2200,
     });
 });
+
+test('tempo source reports UI status for active MIDI clock', () => {
+    const clock = new MidiClockTracker();
+    const tap = new TapTempoTracker();
+    const source = new TempoSource({ clock, tap });
+
+    tap.tap(1000);
+    tap.tap(1500);
+    for (let i = 0; i <= 48; i++) {
+        clock.tick(i * 20);
+    }
+
+    assert.deepEqual(source.getStatus(970), {
+        source: 'midi',
+        active: true,
+        bpm: 125,
+        beatMs: 480,
+        beatProgress: 0.020833333333333332,
+        lastBeatTimeMs: 960,
+        nextBeatTimeMs: 1440,
+        lastTickAgeMs: 10,
+    });
+});
+
+test('tempo source reports tap fallback status when MIDI clock is unavailable', () => {
+    const clock = new MidiClockTracker();
+    const tap = new TapTempoTracker();
+    const source = new TempoSource({ clock, tap });
+
+    tap.tap(1000);
+    tap.tap(1600);
+
+    assert.deepEqual(source.getStatus(2200), {
+        source: 'tap',
+        active: true,
+        bpm: 100,
+        beatMs: 600,
+        beatProgress: 0,
+        lastBeatTimeMs: 2200,
+        nextBeatTimeMs: 2800,
+        lastTickAgeMs: null,
+    });
+});

@@ -164,6 +164,58 @@ class TempoSource {
 
         return null;
     }
+
+    getStatus(timeMs = Date.now()) {
+        if (this.clock.isActive(timeMs)) {
+            return this.createStatus({
+                source: 'midi',
+                beatMs: this.clock.getBeatMs(),
+                lastBeatTimeMs: this.clock.getClosestBeatTime(timeMs),
+                lastTickAgeMs: timeMs - this.clock.lastTickTime,
+                timeMs,
+            });
+        }
+
+        const tapBeatMs = this.tap.getBeatMs();
+        if (tapBeatMs !== null) {
+            return this.createStatus({
+                source: 'tap',
+                beatMs: tapBeatMs,
+                lastBeatTimeMs: timeMs,
+                lastTickAgeMs: null,
+                timeMs,
+            });
+        }
+
+        return {
+            source: 'none',
+            active: false,
+            bpm: null,
+            beatMs: null,
+            beatProgress: 0,
+            lastBeatTimeMs: null,
+            nextBeatTimeMs: null,
+            lastTickAgeMs: null,
+        };
+    }
+
+    createStatus({ source, beatMs, lastBeatTimeMs, lastTickAgeMs, timeMs }) {
+        const beatsFromReference = Math.floor((timeMs - lastBeatTimeMs) / beatMs);
+        const currentBeatTimeMs = lastBeatTimeMs + beatsFromReference * beatMs;
+        const nextBeatTimeMs = currentBeatTimeMs + beatMs;
+        const beatProgress = Math.max(0, Math.min(1, (timeMs - currentBeatTimeMs) / beatMs));
+
+        return {
+            source,
+            active: true,
+            bpm: 60000 / beatMs,
+            beatMs,
+            beatProgress,
+            lastBeatTimeMs: currentBeatTimeMs,
+            nextBeatTimeMs,
+            lastTickAgeMs,
+        };
+    }
 }
 
 function getAutoLoopDurationMs(durationKey, beatMs) {
