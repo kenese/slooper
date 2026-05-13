@@ -60,6 +60,8 @@ const transport = new OscTransport({
     },
 });
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 controller = createController({
     transport,
     config: runtimeConfig.controller,
@@ -70,7 +72,7 @@ controller = createController({
         : null,
 });
 
-function openMidiClockInput() {
+async function openMidiClockInput() {
     const inputs = easymidi.getInputs();
     const matchName = runtimeConfig.midi.midiName;
     const inputIndex = inputs.findIndex((name) => name.toLowerCase().includes(matchName.toLowerCase()));
@@ -82,14 +84,24 @@ function openMidiClockInput() {
     }
 
     const inputName = inputs[inputIndex];
-    try {
-        midiClockInput = new easymidi.Input(inputIndex);
-    } catch (err) {
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            midiClockInput = new easymidi.Input(inputName);
-        } catch (fallbackErr) {
-            console.warn(`Could not open MIDI clock input "${inputName}": ${fallbackErr.message}`);
-            return;
+            midiClockInput = new easymidi.Input(inputIndex);
+            break;
+        } catch (err) {
+            try {
+                midiClockInput = new easymidi.Input(inputName);
+                break;
+            } catch (fallbackErr) {
+                if (attempt < maxRetries) {
+                    console.warn(`Could not open MIDI clock input "${inputName}" (attempt ${attempt}/${maxRetries}): ${fallbackErr.message}; retrying in 1s...`);
+                    await sleep(1000);
+                } else {
+                    console.warn(`Could not open MIDI clock input "${inputName}": ${fallbackErr.message}`);
+                    return;
+                }
+            }
         }
     }
 
