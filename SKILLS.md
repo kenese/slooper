@@ -45,14 +45,18 @@ cd ~/slooper
 # Use Traktor X1 MK3 controller
 ./start.sh midi-device=X1MK3
 
-# Use browser OSC controller instead of MIDI hardware
-./start.sh midi-device=OSC
+# Use XONE audio and browser OSC controller instead of MIDI hardware
+./start.sh audio-device=XONE midi-device=OSC 
+# or
+./start.sh audio-device=XONE midi-device=WEB
+# you will need to open an SSH Tunnel to the MAC in another terminal window
+ssh -L 3000:127.0.0.1:3000 patch@patchbox.local  
 
 # Use Traktor Z1 audio interface
 ./start.sh audio-device=Z1
 
 # Use Mac/BlackHole dev audio
-./start.sh device=MAC
+./start.sh audio-device=MAC
 
 # Combine options
 ./start.sh midi-device=X1MK3 audio-device=Z1 --restart-jack

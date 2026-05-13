@@ -27,3 +27,8 @@ test('start.sh mac cleanup stops untracked Pd processes and inspects common dev 
 test('start.sh avoids awk built-in names for JACK card lookup variables', () => {
     assert.doesNotMatch(startScript, /awk -v match=/);
 });
+
+test('start.sh parses numeric ALSA card id from aplay output for JACK', () => {
+    assert.ok(startScript.includes('sub(/:$/, "", $2); print $2; exit'));
+    assert.doesNotMatch(startScript, /sub\(\/\^card \//);
+});

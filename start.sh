@@ -183,7 +183,7 @@ else
     if ! pgrep -x jackd > /dev/null && ! pgrep -x jackdbus > /dev/null; then
         echo "Starting JACK audio server..."
 
-        JACK_CARD="$(aplay -l 2>/dev/null | awk -v card_pattern="$JACK_CARD_NAME_INCLUDES" 'BEGIN { IGNORECASE=1 } $0 ~ card_pattern { sub(/^card /, "", $1); sub(/:$/, "", $1); print $1; exit }')"
+        JACK_CARD="$(aplay -l 2>/dev/null | awk -v card_pattern="$JACK_CARD_NAME_INCLUDES" 'BEGIN { IGNORECASE=1 } $0 ~ card_pattern { sub(/:$/, "", $2); print $2; exit }')"
 
         if [ -n "$JACK_CARD" ]; then
             echo "   Found $JACK_CARD_NAME_INCLUDES on card $JACK_CARD"
