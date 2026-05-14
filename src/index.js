@@ -5,6 +5,7 @@ const { createController, SlotState } = require('./controller/slot_controller');
 const { JackCaptureRouter } = require('./controller/jack_capture_router');
 const { OscTransport } = require('./controller/osc_transport');
 const { MidiClockTracker, TapTempoTracker, TempoSource } = require('./controller/tempo');
+const { createWebServer } = require('./controller/web_server');
 
 const args = process.argv.slice(2);
 const midiArg = args.find((arg) => arg.startsWith('midi-device='));
@@ -106,6 +107,7 @@ function openMidiOutput() {
 }
 
 let controller;
+let webServer = null;
 const midiClock = new MidiClockTracker();
 const tapTempo = new TapTempoTracker();
 const tempo = new TempoSource({ clock: midiClock, tap: tapTempo });
@@ -131,6 +133,15 @@ const transport = new OscTransport({
 
     const output = openMidiOutput();
     setupMidiHandlers(input, output);
+
+    if (args.includes('--web')) {
+        const WEB_HOST = '127.0.0.1';
+        const WEB_PORT = Number(process.env.SLOOPER_WEB_PORT || 3000);
+        webServer = createWebServer({ controller, tapTempo, runtimeConfig });
+        webServer.listen(WEB_PORT, WEB_HOST).then((port) => {
+            console.log(`Web controller: http://${WEB_HOST}:${port}`);
+        });
+    }
 })();
 
 function setupMidiHandlers(input, output) {
@@ -473,6 +484,7 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 function shutdown() {
+    if (webServer) webServer.close();
     transport.close();
     process.exit(0);
 }
