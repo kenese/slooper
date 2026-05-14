@@ -22,8 +22,10 @@ function createSlot(id) {
         startCropOffset: 0,
         pendingDelta: 0,
         pendingStartDelta: 0,
+        pendingMoveDelta: 0,
         updateTimer: null,
         startUpdateTimer: null,
+        moveUpdateTimer: null,
         autoStartTimer: null,
         autoStopTimer: null,
         pendingAutoRecord: null,
@@ -193,6 +195,7 @@ class SlotController {
         slot.startCropOffset = 0;
         slot.pendingDelta = 0;
         slot.pendingStartDelta = 0;
+        slot.pendingMoveDelta = 0;
         if (slot.updateTimer) {
             this.clearTimeout(slot.updateTimer);
             slot.updateTimer = null;
@@ -200,6 +203,10 @@ class SlotController {
         if (slot.startUpdateTimer) {
             this.clearTimeout(slot.startUpdateTimer);
             slot.startUpdateTimer = null;
+        }
+        if (slot.moveUpdateTimer) {
+            this.clearTimeout(slot.moveUpdateTimer);
+            slot.moveUpdateTimer = null;
         }
         this.clearAutoTimers(slot);
     }
@@ -303,6 +310,26 @@ class SlotController {
             slot.pendingStartDelta = 0;
             slot.startUpdateTimer = null;
             await this.cropStartSlot(slot.id, pending);
+            if (onFlush) onFlush(slot, pending);
+        }, this.config.encoderThrottleMs);
+    }
+
+    scheduleMove(id, delta, onFlush) {
+        const slot = this.requireSlot(id);
+        if (slot.state !== SlotState.PLAYING || delta === 0) {
+            return;
+        }
+
+        slot.pendingMoveDelta += delta;
+        if (slot.moveUpdateTimer) {
+            return;
+        }
+
+        slot.moveUpdateTimer = this.setTimeout(async () => {
+            const pending = slot.pendingMoveDelta;
+            slot.pendingMoveDelta = 0;
+            slot.moveUpdateTimer = null;
+            await this.moveSlot(slot.id, pending);
             if (onFlush) onFlush(slot, pending);
         }, this.config.encoderThrottleMs);
     }

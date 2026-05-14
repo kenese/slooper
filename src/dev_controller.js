@@ -33,7 +33,7 @@ function getClockMidiDeviceName() {
         return requestedMidiDevice;
     }
 
-    return 'XONE';
+    return 'X1MK3';
 }
 
 const runtimeConfig = getRuntimeConfig({

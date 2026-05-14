@@ -1,13 +1,32 @@
 {
   "name": "Native Instruments Traktor X1 MK3",
-  "match": "TRAKTOR X1MK3",
+  "match": "TRAKTOR X1 MK3",
   "controls": {
     "slot1Button": { "type": "note", "note": 10, "channel": 0 },
-    "slot2Button": { "type": "note", "note": 10, "channel": 1 },
-    "slot1Encoder": { "type": "cc", "controller": 20, "channel": 0, "mode": "relative-64" },
-    "slot2Encoder": { "type": "cc", "controller": 21, "channel": 1, "mode": "relative-64" },
     "slot1Reset": { "type": "note", "note": 20, "channel": 0 },
+    "slot1Encoder": { "type": "cc", "controller": 20, "channel": 0, "mode": "relative-64" },
+    "slot1StartEncoder": { "type": "cc", "controller": 21, "channel": 0, "mode": "relative-64" },
+    "slot1MoveEncoder": { "type": "cc", "controller": 21, "channel": 2, "mode": "relative-64" },
+    "slot1Half": { "type": "note", "note": 8, "channel": 0 },
+    "slot1Double": { "type": "note", "note": 9, "channel": 0 },
+    "slot1AutoLoop1Beat": { "type": "note", "note": 2, "channel": 0 },
+    "slot1AutoLoop2Beat": { "type": "note", "note": 3, "channel": 0 },
+    "slot1AutoLoop4Beat": { "type": "note", "note": 4, "channel": 0 },
+    "slot1AutoLoop2Bar": { "type": "note", "note": 5, "channel": 0 },
+
+    "slot2Button": { "type": "note", "note": 10, "channel": 1 },
+    "slot2Encoder": { "type": "cc", "controller": 21, "channel": 1, "mode": "relative-64" },
     "slot2Reset": { "type": "note", "note": 21, "channel": 0 },
-    "monitorButton": { "type": "note", "note": 11, "channel": 0 }
+    "slot2StartEncoder": { "type": "cc", "controller": 21, "channel": 1, "mode": "relative-64" },
+    "slot2MoveEncoder": { "type": "cc", "controller": 21, "channel": 3, "mode": "relative-64" },
+    "slot2Half": { "type": "note", "note": 8, "channel": 1 },
+    "slot2Double": { "type": "note", "note": 9, "channel": 1 },
+    "slot2AutoLoop1Beat": { "type": "note", "note": 2, "channel": 1 },
+    "slot2AutoLoop2Beat": { "type": "note", "note": 3, "channel": 1 },
+    "slot2AutoLoop4Beat": { "type": "note", "note": 4, "channel": 1 },
+    "slot2AutoLoop2Bar": { "type": "note", "note": 5, "channel": 1 },
+
+    "monitorButton": { "type": "note", "note": 11, "channel": 0 },
+    "tapTempo": { "type": "note", "note": 11, "channel": 1 }
   }
 }

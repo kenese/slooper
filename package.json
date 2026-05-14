@@ -9,7 +9,8 @@
     "test:unit": "node --test test/unit/*.test.js",
     "test:engine": "node test/test_engine.js",
     "test:engine:managed": "node test/run_engine_tests.js",
-    "dev:mac": "./start.sh device=MAC midi-device=OSC",
+    "dev:mac": "./start.sh audio-device=MAC midi-device=WEB",
+    "dev:mac:x1": "./start.sh audio-device=MAC midi-device=X1MK3",
     "midi:log": "node src/midi_logger.js",
     "osc:debug": "node scripts/debug_osc.js",
     "osc:send": "node scripts/send_osc.js"

@@ -218,7 +218,7 @@ function requireMidiControl(controls, name, type) {
 
 function optionalMidiControl(controls, name, type) {
     const control = controls[name];
-    if (!control) {
+    if (!control || !control.type) {
         return null;
     }
     return validateMidiControl(control, name, type);
@@ -261,6 +261,8 @@ function validateMidiConfig(raw) {
     requireMidiControl(controls, 'slot2Encoder', 'cc');
     optionalMidiControl(controls, 'slot1StartEncoder', 'cc');
     optionalMidiControl(controls, 'slot2StartEncoder', 'cc');
+    optionalMidiControl(controls, 'slot1MoveEncoder', 'cc');
+    optionalMidiControl(controls, 'slot2MoveEncoder', 'cc');
     optionalMidiControl(controls, 'slot1AutoLoop1Beat', 'note');
     optionalMidiControl(controls, 'slot1AutoLoop2Beat', 'note');
     optionalMidiControl(controls, 'slot1AutoLoop4Beat', 'note');
@@ -324,6 +326,8 @@ function normalizeMidiConfig(raw) {
     const controls = raw.controls || {};
     const slot1StartEncoder = controls.slot1StartEncoder || {};
     const slot2StartEncoder = controls.slot2StartEncoder || {};
+    const slot1MoveEncoder = controls.slot1MoveEncoder || {};
+    const slot2MoveEncoder = controls.slot2MoveEncoder || {};
 
     return {
         name: raw.name,
@@ -338,6 +342,9 @@ function normalizeMidiConfig(raw) {
             startEncoderCC: slot1StartEncoder.controller,
             startEncoderChannel: slot1StartEncoder.channel,
             startEncoderMode: slot1StartEncoder.mode,
+            moveEncoderCC: slot1MoveEncoder.controller,
+            moveEncoderChannel: slot1MoveEncoder.channel,
+            moveEncoderMode: slot1MoveEncoder.mode,
             autoLoops: normalizeAutoLoopControls(controls, 'slot1'),
             half: normalizeNoteControl(controls.slot1Half),
             double: normalizeNoteControl(controls.slot1Double),
@@ -351,6 +358,9 @@ function normalizeMidiConfig(raw) {
             startEncoderCC: slot2StartEncoder.controller,
             startEncoderChannel: slot2StartEncoder.channel,
             startEncoderMode: slot2StartEncoder.mode,
+            moveEncoderCC: slot2MoveEncoder.controller,
+            moveEncoderChannel: slot2MoveEncoder.channel,
+            moveEncoderMode: slot2MoveEncoder.mode,
             autoLoops: normalizeAutoLoopControls(controls, 'slot2'),
             half: normalizeNoteControl(controls.slot2Half),
             double: normalizeNoteControl(controls.slot2Double),

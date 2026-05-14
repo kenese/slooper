@@ -3,11 +3,30 @@
   "match": "XONE",
   "controls": {
     "slot1Button": { "type": "note", "note": 14, "channel": 15 },
-    "slot2Button": { "type": "note", "note": 15, "channel": 15 },
     "slot1Encoder": { "type": "cc", "controller": 7, "channel": 15, "mode": "relative-64" },
-    "slot2Encoder": { "type": "cc", "controller": 7, "channel": 15, "mode": "relative-64" },
     "slot1Reset": { "type": "note", "note": 28, "channel": 15 },
+    "slot1StartEncoder": null,
+    "slot1MoveEncoder": null,
+    "slot1Half": null,
+    "slot1Double": null,
+    "slot1AutoLoop1Beat": null,
+    "slot1AutoLoop2Beat": null,
+    "slot1AutoLoop4Beat": null,
+    "slot1AutoLoop2Bar": null,
+
+    "slot2Button": { "type": "note", "note": 15, "channel": 15 },
+    "slot2Encoder": { "type": "cc", "controller": 7, "channel": 15, "mode": "relative-64" },
     "slot2Reset": { "type": "note", "note": 38, "channel": 15 },
-    "monitorButton": { "type": "note", "note": 10, "channel": 15 }
+    "slot2StartEncoder": null,
+    "slot2MoveEncoder": null,
+    "slot2Half": null,
+    "slot2Double": null,
+    "slot2AutoLoop1Beat": null,
+    "slot2AutoLoop2Beat": null,
+    "slot2AutoLoop4Beat": null,
+    "slot2AutoLoop2Bar": null,
+
+    "monitorButton": { "type": "note", "note": 10, "channel": 15 },
+    "tapTempo": null
   }
 }

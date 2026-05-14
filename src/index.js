@@ -288,6 +288,12 @@ function setupMidiHandlers(input, output) {
         } else if (midi.slot2.startEncoderCC !== undefined && msg.controller === midi.slot2.startEncoderCC && msg.channel === (midi.slot2.startEncoderChannel ?? midi.slot2.channel)) {
             slotId = 2;
             target = 'start';
+        } else if (midi.slot1.moveEncoderCC !== undefined && msg.controller === midi.slot1.moveEncoderCC && msg.channel === (midi.slot1.moveEncoderChannel ?? midi.slot1.channel)) {
+            slotId = 1;
+            target = 'move';
+        } else if (midi.slot2.moveEncoderCC !== undefined && msg.controller === midi.slot2.moveEncoderCC && msg.channel === (midi.slot2.moveEncoderChannel ?? midi.slot2.channel)) {
+            slotId = 2;
+            target = 'move';
         }
         if (slotId) handleEncoder(slotId, msg.value, target);
     });
@@ -336,6 +342,14 @@ function setupMidiHandlers(input, output) {
             controller.scheduleStartCrop(slotId, delta, (slot) => {
                 const offset = slot.startCropOffset >= 0 ? `+${slot.startCropOffset}` : slot.startCropOffset;
                 console.log(`[Slot ${slot.id}] start crop ${offset}ms`);
+            });
+            return;
+        }
+
+        if (target === 'move') {
+            controller.scheduleMove(slotId, delta, (slot) => {
+                const offset = slot.startCropOffset >= 0 ? `+${slot.startCropOffset}` : slot.startCropOffset;
+                console.log(`[Slot ${slot.id}] move ${offset}ms`);
             });
             return;
         }
@@ -421,6 +435,11 @@ function setupMidiHandlers(input, output) {
         const s1 = midi.slot1.startEncoderCC !== undefined ? `Ch${midi.slot1.startEncoderChannel ?? midi.slot1.channel} CC${midi.slot1.startEncoderCC}` : 'not mapped';
         const s2 = midi.slot2.startEncoderCC !== undefined ? `Ch${midi.slot2.startEncoderChannel ?? midi.slot2.channel} CC${midi.slot2.startEncoderCC}` : 'not mapped';
         console.log(`  START ENCODER : [S1: ${s1}] [S2: ${s2}] -> Adjust Loop Start`);
+    }
+    if (midi.slot1.moveEncoderCC !== undefined || midi.slot2.moveEncoderCC !== undefined) {
+        const s1 = midi.slot1.moveEncoderCC !== undefined ? `Ch${midi.slot1.moveEncoderChannel ?? midi.slot1.channel} CC${midi.slot1.moveEncoderCC}` : 'not mapped';
+        const s2 = midi.slot2.moveEncoderCC !== undefined ? `Ch${midi.slot2.moveEncoderChannel ?? midi.slot2.channel} CC${midi.slot2.moveEncoderCC}` : 'not mapped';
+        console.log(`  MOVE ENCODER  : [S1: ${s1}] [S2: ${s2}] -> Shift Loop Window`);
     }
     console.log(`  ENCODER PRESS : [S1: Ch${midi.encoderPress1.channel} N${midi.encoderPress1.note}] [S2: Ch${midi.encoderPress2.channel} N${midi.encoderPress2.note}] -> Reset Length`);
     if (autoLoopButtons.length > 0) {
