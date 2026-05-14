@@ -287,18 +287,14 @@
   <div class="mode-block">
     <h3>Mode A — Hardware MIDI (X1MK3 / XONE)</h3>
     <div class="mode-cmd">./start.sh midi-device=X1MK3</div>
-    <p class="mode-desc">Runs <code>src/index.js</code>. Reads physical MIDI controller. Sends LED feedback. MIDI clock from hardware.</p>
+    <div class="mode-cmd" style="margin-top:4px;">./start.sh midi-device=X1MK3 --web</div>
+    <p class="mode-desc">Runs <code>src/index.js</code>. Reads physical MIDI controller. Sends LED feedback. Add <code>--web</code> to also serve the browser UI on :3000 — both share one controller and one OSC socket.</p>
   </div>
   <div class="mode-divider"></div>
   <div class="mode-block">
-    <h3>Mode B — Web Controller</h3>
+    <h3>Mode B — Web Only</h3>
     <div class="mode-cmd">./start.sh midi-device=WEB</div>
-    <p class="mode-desc">Runs <code>src/dev_controller.js</code>. Serves browser UI on :3000. MIDI clock still from XONE. No physical button control.</p>
-  </div>
-  <div class="mode-divider"></div>
-  <div class="mode-block">
-    <h3>Limitation</h3>
-    <p class="mode-desc" style="color:#f87171;">These are two separate processes. Both cannot run simultaneously against the same looper state — each creates its own controller instance and OSC connection.</p>
+    <p class="mode-desc">Runs <code>src/dev_controller.js</code>. Serves browser UI on :3000. Optional MIDI clock from X1MK3. Use when no physical controller is connected.</p>
   </div>
 </div>
 
@@ -412,13 +408,14 @@
       CC → crop end / crop start / move (encoder turn)<br>
       encoder press → reset<br>
       clock ticks → MidiClockTracker → TempoSource<br><br>
-      Calls createController() → OscTransport
+      Calls createController() → OscTransport<br>
+      Optionally mounts web_server.js (--web flag)
     </div>
     <span class="tag midi">MIDI in/out</span>
     <span class="tag osc">OSC send/recv</span>
   </div>
 
-  <div class="box node mode-only" data-mode="Mode B" id="devjs" style="min-width:300px;">
+  <div class="box node mode-only" data-mode="Mode B only" id="devjs" style="min-width:300px;">
     <div class="box-title">src/dev_controller.js  — Web controller</div>
     <div class="box-sub">
       HTTP server on :3000 → serves dev-controller.html<br>
@@ -426,11 +423,26 @@
       GET  /api/state  → full controller state JSON<br><br>
       Also opens MIDI input for clock only (XONE by default)<br>
       clock ticks → MidiClockTracker → TempoSource<br><br>
-      Calls createController() → OscTransport
+      Calls createController() → OscTransport<br>
+      Delegates HTTP to web_server.js
     </div>
     <span class="tag http">HTTP :3000</span>
     <span class="tag midi">clock only</span>
     <span class="tag osc">OSC send/recv</span>
+  </div>
+
+  <div class="box node" id="web-server-js" style="min-width:260px;">
+    <div class="box-title">controller/web_server.js</div>
+    <div class="box-sub">
+      Shared HTTP server factory.<br><br>
+      GET  / → dev-controller.html<br>
+      GET  /api/state → controller.getState()<br>
+      POST /api/action → handleAction()<br><br>
+      Returns { listen(port, host), close() }<br>
+      Used by index.js (--web) and dev_controller.js
+    </div>
+    <span class="tag http">HTTP :3000</span>
+    <span class="tag shared">shared</span>
   </div>
 
   <div class="box node" id="slot-controller" style="min-width:260px;">
@@ -523,9 +535,8 @@
 
 </div><!-- /canvas -->
 
-<div class="note">
-  <strong>Current limitation:</strong> Mode A (X1MK3) and Mode B (web) cannot run concurrently — each creates its own <code>createController()</code> instance and OSC connection to Pd.
-  Fix: absorb the HTTP server from <code>dev_controller.js</code> into <code>index.js</code> so both share one controller instance and one OSC socket.
+<div class="note" style="border-color:#34d399; background:#061810; color:#065f46;">
+  <strong style="color:#34d399;">Fixed:</strong> <code>src/controller/web_server.js</code> is a shared factory used by both <code>index.js</code> (via <code>--web</code>) and <code>dev_controller.js</code>. Both modes now share one controller instance and one OSC socket. Run both simultaneously: <code>./start.sh midi-device=X1MK3 --web</code>
 </div>
 
 <script>
@@ -548,6 +559,7 @@ const DEFAULT_POSITIONS = {
   browser:         { left:  20, top:1080 },
   'config-files':  { left: 420, top:1080 },
   startsh:         { left: 750, top:1080 },
+  'web-server-js': { left: 760, top: 880 },
 };
 
 function applyPositions(positions) {
@@ -700,8 +712,10 @@ const arrows = [
   { from: 'devjs',         to: 'tempo',            label: 'tick()',                            color: '#f59e0b', dashed: true },
 
   // HTTP
-  { from: 'browser',       to: 'devjs',            label: 'POST /api/action\nGET /api/state', color: '#34d399' },
-  { from: 'devjs',         to: 'browser',          label: 'HTML + JSON state',                color: '#34d399', offset: 12 },
+  { from: 'browser',       to: 'web-server-js',     label: 'POST /api/action\nGET /api/state', color: '#34d399' },
+  { from: 'web-server-js', to: 'browser',           label: 'HTML + JSON state',                color: '#34d399', offset: 12 },
+  { from: 'devjs',         to: 'web-server-js',     label: 'delegates HTTP',                   color: '#34d399', dashed: true },
+  { from: 'indexjs',       to: 'web-server-js',     label: 'HTTP (--web)',                     color: '#34d399', dashed: true },
 
   // Pd internal
   { from: 'pd-engine',     to: 'pd-slot',          label: 'instantiates ×2\naudio + control', color: '#a78bfa', dashed: true },
