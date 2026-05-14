@@ -14,6 +14,7 @@
     font-size: 13px;
     min-height: 100vh;
     padding: 32px;
+    overflow: auto;
   }
 
   h1 {
@@ -28,15 +29,22 @@
   .subtitle {
     color: #64748b;
     font-size: 12px;
-    margin-bottom: 40px;
+    margin-bottom: 28px;
   }
 
-  /* ── Legend ── */
+  /* ── Legend + controls bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
   .legend {
     display: flex;
     gap: 20px;
-    margin-bottom: 36px;
     flex-wrap: wrap;
+    flex: 1;
   }
   .legend-item {
     display: flex;
@@ -49,16 +57,80 @@
     width: 32px;
     height: 2px;
   }
-  .legend-line.audio    { background: #22d3ee; }
-  .legend-line.midi     { background: #f59e0b; }
-  .legend-line.osc      { background: #a78bfa; }
-  .legend-line.http     { background: #34d399; }
-  .legend-line.process  { background: #f87171; }
+  .legend-line.audio   { background: #22d3ee; }
+  .legend-line.midi    { background: #f59e0b; }
+  .legend-line.osc     { background: #a78bfa; }
+  .legend-line.http    { background: #34d399; }
+  .legend-line.process { background: #f87171; }
+
+  .btn-reset {
+    font-family: inherit;
+    font-size: 10px;
+    color: #475569;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    letter-spacing: 0.05em;
+  }
+  .btn-reset:hover { color: #94a3b8; border-color: #475569; }
+
+  /* ── Mode strip ── */
+  .mode-strip {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+    padding: 14px 16px;
+    background: #1e293b;
+    border-radius: 8px;
+    border: 1px solid #334155;
+    align-items: flex-start;
+  }
+  .mode-strip h3 {
+    font-size: 11px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+  .mode-block { flex: 1; }
+  .mode-cmd {
+    font-size: 11px;
+    color: #e2e8f0;
+    background: #0f172a;
+    padding: 4px 10px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 4px;
+  }
+  .mode-desc {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 6px;
+    line-height: 1.5;
+  }
+  .mode-divider {
+    width: 1px;
+    background: #334155;
+    align-self: stretch;
+    margin: 0 4px;
+  }
+
+  /* ── Drag hint ── */
+  .drag-hint {
+    font-size: 10px;
+    color: #334155;
+    margin-bottom: 12px;
+    letter-spacing: 0.04em;
+  }
 
   /* ── Diagram canvas ── */
   .canvas {
     position: relative;
-    width: 100%;
+    min-width: 2000px;
+    min-height: 1800px;
   }
 
   svg.arrows {
@@ -69,54 +141,17 @@
     overflow: visible;
   }
 
-  /* ── Layer rows ── */
-  .layer {
-    display: flex;
-    align-items: flex-start;
-    gap: 16px;
-    margin-bottom: 0;
-    position: relative;
-  }
-
-  .layer-label {
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-    transform: rotate(180deg);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: #475569;
-    min-width: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 12px 0;
-  }
-
-  .layer-content {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    flex: 1;
-    padding: 16px 0;
-    position: relative;
-  }
-
-  .layer-divider {
-    border: none;
-    border-top: 1px solid #1e293b;
-    margin: 4px 0 4px 36px;
-  }
-
   /* ── Boxes ── */
   .box {
     border: 1px solid;
     border-radius: 8px;
     padding: 12px 16px;
-    position: relative;
+    position: absolute;
     background: #151b2d;
+    cursor: grab;
+    user-select: none;
   }
+  .box.dragging { cursor: grabbing; z-index: 1000; box-shadow: 0 8px 32px rgba(0,0,0,0.6); }
 
   .box .box-title {
     font-weight: 700;
@@ -143,19 +178,19 @@
   }
 
   /* colour themes */
-  .box.hardware  { border-color: #334155; }
+  .box.hardware { border-color: #334155; }
   .box.hardware .box-title { color: #94a3b8; }
 
-  .box.jack      { border-color: #0e7490; background: #0c1929; }
+  .box.jack     { border-color: #0e7490; background: #0c1929; }
   .box.jack .box-title { color: #22d3ee; }
 
-  .box.pd        { border-color: #5b21b6; background: #130d2a; }
+  .box.pd       { border-color: #5b21b6; background: #130d2a; }
   .box.pd .box-title { color: #a78bfa; }
 
-  .box.node      { border-color: #065f46; background: #0a1f18; }
+  .box.node     { border-color: #065f46; background: #0a1f18; }
   .box.node .box-title { color: #34d399; }
 
-  .box.web       { border-color: #92400e; background: #1c1206; }
+  .box.web      { border-color: #92400e; background: #1c1206; }
   .box.web .box-title { color: #fbbf24; }
 
   .box.mode-only { border-style: dashed; }
@@ -173,56 +208,13 @@
     text-transform: uppercase;
   }
 
-  .tag.audio    { background: #164e63; color: #67e8f9; }
-  .tag.midi     { background: #451a03; color: #fcd34d; }
-  .tag.osc      { background: #2e1065; color: #c4b5fd; }
-  .tag.http     { background: #064e3b; color: #6ee7b7; }
-  .tag.linux    { background: #0c2340; color: #7dd3fc; }
-  .tag.mac      { background: #1c1206; color: #fbbf24; }
-  .tag.shared   { background: #1e1e1e; color: #94a3b8; }
-
-  /* ── Mode toggle ── */
-  .mode-strip {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 36px;
-    padding: 14px 16px;
-    background: #1e293b;
-    border-radius: 8px;
-    border: 1px solid #334155;
-    align-items: flex-start;
-  }
-  .mode-strip h3 {
-    font-size: 11px;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 8px;
-  }
-  .mode-block {
-    flex: 1;
-  }
-  .mode-cmd {
-    font-size: 11px;
-    color: #e2e8f0;
-    background: #0f172a;
-    padding: 4px 10px;
-    border-radius: 4px;
-    display: inline-block;
-    margin-top: 4px;
-  }
-  .mode-desc {
-    font-size: 11px;
-    color: #64748b;
-    margin-top: 6px;
-    line-height: 1.5;
-  }
-  .mode-divider {
-    width: 1px;
-    background: #334155;
-    align-self: stretch;
-    margin: 0 4px;
-  }
+  .tag.audio   { background: #164e63; color: #67e8f9; }
+  .tag.midi    { background: #451a03; color: #fcd34d; }
+  .tag.osc     { background: #2e1065; color: #c4b5fd; }
+  .tag.http    { background: #064e3b; color: #6ee7b7; }
+  .tag.linux   { background: #0c2340; color: #7dd3fc; }
+  .tag.mac     { background: #1c1206; color: #fbbf24; }
+  .tag.shared  { background: #1e1e1e; color: #94a3b8; }
 
   /* ── Port labels ── */
   .port {
@@ -234,7 +226,7 @@
 
   /* ── Note block ── */
   .note {
-    margin-top: 32px;
+    margin-top: 24px;
     padding: 12px 16px;
     border-left: 3px solid #f59e0b;
     background: #1c1206;
@@ -251,16 +243,17 @@
 <h1>Slooper — System Architecture</h1>
 <p class="subtitle">Node.js (MIDI/OSC) + Pure Data (audio) + JACK (Linux) on Raspberry Pi / Mac</p>
 
-<!-- Legend -->
-<div class="legend">
-  <div class="legend-item"><div class="legend-line audio"></div> Audio (JACK / DAC)</div>
-  <div class="legend-item"><div class="legend-line midi"></div> MIDI (USB)</div>
-  <div class="legend-item"><div class="legend-line osc"></div> OSC (UDP)</div>
-  <div class="legend-item"><div class="legend-line http"></div> HTTP / WebSocket</div>
-  <div class="legend-item"><div class="legend-line process"></div> Process spawn</div>
+<div class="topbar">
+  <div class="legend">
+    <div class="legend-item"><div class="legend-line audio"></div> Audio (JACK / DAC)</div>
+    <div class="legend-item"><div class="legend-line midi"></div> MIDI (USB)</div>
+    <div class="legend-item"><div class="legend-line osc"></div> OSC (UDP)</div>
+    <div class="legend-item"><div class="legend-line http"></div> HTTP / WebSocket</div>
+    <div class="legend-item"><div class="legend-line process"></div> Process spawn</div>
+  </div>
+  <button class="btn-reset" onclick="resetLayout()">Reset layout</button>
 </div>
 
-<!-- Mode strip -->
 <div class="mode-strip">
   <div class="mode-block">
     <h3>Mode A — Hardware MIDI (X1MK3 / XONE)</h3>
@@ -280,260 +273,223 @@
   </div>
 </div>
 
+<p class="drag-hint">Drag boxes to rearrange · arrows follow · layout saved in browser</p>
+
 <!-- Diagram -->
 <div class="canvas" id="canvas">
   <svg class="arrows" id="arrows"></svg>
 
-  <!-- LAYER: Hardware -->
-  <div class="layer">
-    <div class="layer-label">Hardware</div>
-    <div class="layer-content">
-
-      <div class="box hardware" id="xone">
-        <div class="box-title">Allen &amp; Heath XONE:PX5</div>
-        <div class="box-sub">
-          USB audio interface + MIDI I/O<br>
-          Ch 9–10 → audio input<br>
-          Ch 1–2 ← audio output<br>
-          MIDI port: <span class="port">TRAKTOR X1 MK3</span> (name match)
-        </div>
-        <span class="tag audio">10ch USB audio</span>
-        <span class="tag midi">MIDI I/O</span>
-        <span class="tag shared">both modes</span>
-      </div>
-
-      <div class="box hardware" id="x1mk3">
-        <div class="box-title">Traktor X1 MK3</div>
-        <div class="box-sub">
-          USB MIDI controller<br>
-          Slot 1 btn: ch 0 n 10<br>
-          Slot 2 btn: ch 1 n 10<br>
-          Encoder 1: ch 0 CC 20<br>
-          Encoder 2: ch 1 CC 21<br>
-          Monitor: ch 0 n 11<br>
-          Reset 1: ch 0 n 20 / Reset 2: ch 0 n 21
-        </div>
-        <span class="tag midi">MIDI only</span>
-        <span class="tag mac">mode A</span>
-      </div>
-
-      <div class="box hardware" id="speakers">
-        <div class="box-title">Audio Out</div>
-        <div class="box-sub">
-          Speakers / headphones<br>
-          via XONE main output
-        </div>
-        <span class="tag audio">DAC</span>
-      </div>
-
+  <!-- Hardware -->
+  <div class="box hardware" id="xone" style="min-width:220px;">
+    <div class="box-title">Allen &amp; Heath XONE:PX5</div>
+    <div class="box-sub">
+      USB audio interface + MIDI I/O<br>
+      Ch 9–10 → audio input<br>
+      Ch 1–2 ← audio output<br>
+      MIDI port: <span class="port">XONE:PX5</span> (name match)
     </div>
+    <span class="tag audio">10ch USB audio</span>
+    <span class="tag midi">MIDI I/O</span>
+    <span class="tag shared">both modes</span>
   </div>
-  <hr class="layer-divider">
 
-  <!-- LAYER: OS / JACK -->
-  <div class="layer">
-    <div class="layer-label">Audio routing</div>
-    <div class="layer-content">
-
-      <div class="box jack mode-only" data-mode="Linux / Pi" id="jack">
-        <div class="box-title">JACK Audio Server</div>
-        <div class="box-sub">
-          jackd -d alsa -d hw:&lt;card&gt; -r 48000 -p 128 -n 2<br><br>
-          <strong>Connections wired by start.sh:</strong><br>
-          system:capture_9  → pure_data:input_1<br>
-          system:capture_10 → pure_data:input_2<br>
-          pure_data:output_1 → system:playback_1<br>
-          pure_data:output_2 → system:playback_2
-        </div>
-        <span class="tag audio">low-latency ~5ms</span>
-        <span class="tag linux">Linux only</span>
-      </div>
-
-      <div class="box jack mode-only" data-mode="Mac" id="mac-audio">
-        <div class="box-title">Core Audio (Mac)</div>
-        <div class="box-sub">
-          Pure Data uses native audio directly<br>
-          Runtime patch sets adc~ 9 10 / dac~ 1 2<br>
-          No JACK needed
-        </div>
-        <span class="tag audio">native</span>
-        <span class="tag mac">Mac only</span>
-      </div>
-
+  <div class="box hardware" id="x1mk3" style="min-width:200px;">
+    <div class="box-title">Traktor X1 MK3</div>
+    <div class="box-sub">
+      USB MIDI controller<br>
+      Slot 1 btn: ch 0 n 10<br>
+      Slot 2 btn: ch 1 n 10<br>
+      End Enc 1: ch 0 CC 21 / Start Enc 1: ch 0 CC 20<br>
+      End Enc 2: ch 1 CC 21 / Start Enc 2: ch 1 CC 20<br>
+      Monitor: ch 0 n 11<br>
+      Reset 1: ch 0 n 20 / Reset 2: ch 0 n 21
     </div>
+    <span class="tag midi">MIDI only</span>
+    <span class="tag mac">mode A</span>
   </div>
-  <hr class="layer-divider">
 
-  <!-- LAYER: Pure Data -->
-  <div class="layer">
-    <div class="layer-label">Audio engine</div>
-    <div class="layer-content">
-
-      <div class="box pd" id="pd-engine" style="min-width:340px;">
-        <div class="box-title">Pure Data — engine.pd</div>
-        <div class="box-sub">
-          Thin host patch: OSC parse/route, audio I/O, slot sum, netsend<br><br>
-          OSC in:  <span class="port">netreceive -u -b 9000</span><br>
-          OSC out: <span class="port">netsend -u -b 127.0.0.1:9001</span><br><br>
-          Routes: slot1 | slot2 | monitor | connect<br>
-          Audio: adc~ 1 2 → slots → dac~ 1 2 (+ monitor)
-        </div>
-        <span class="tag osc">UDP :9000 in</span>
-        <span class="tag osc">UDP :9001 out</span>
-        <span class="tag audio">DSP</span>
-      </div>
-
-      <div class="box pd" id="pd-slot" style="min-width:280px;">
-        <div class="box-title">looper_slot.pd  ×2  (slot1, slot2)</div>
-        <div class="box-sub">
-          Per-slot abstraction. Instantiated by engine.pd.<br><br>
-          Inlets:  L audio | R audio | control msgs<br>
-          Outlets: L loop  | R loop  | /state OSC<br><br>
-          Handles: record → phasor playback → crop start/end<br>
-          → anti-click envelope → clear → /state emit<br><br>
-          Arrays: $1_data / $1_data_R  (960 000 samples = 20s @ 48kHz)
-        </div>
-        <span class="tag audio">stereo</span>
-        <span class="tag osc">/state out</span>
-      </div>
-
+  <div class="box hardware" id="speakers" style="min-width:160px;">
+    <div class="box-title">Audio Out</div>
+    <div class="box-sub">
+      Speakers / headphones<br>
+      via XONE main output
     </div>
+    <span class="tag audio">DAC</span>
   </div>
-  <hr class="layer-divider">
 
-  <!-- LAYER: Node.js -->
-  <div class="layer">
-    <div class="layer-label">Controller</div>
-    <div class="layer-content">
-
-      <div class="box node mode-only" data-mode="Mode A" id="indexjs" style="min-width:300px;">
-        <div class="box-title">src/index.js  — MIDI controller</div>
-        <div class="box-sub">
-          Opens physical MIDI input via <code>easymidi</code><br>
-          Sends LED note-on/off to MIDI output<br><br>
-          MIDI events → slot actions:<br>
-          noteon/noteoff → tap / hold-to-clear / monitor<br>
-          CC → crop end / crop start (encoder turn)<br>
-          encoder press → reset<br>
-          clock ticks → MidiClockTracker → TempoSource<br><br>
-          Calls createController() → OscTransport
-        </div>
-        <span class="tag midi">MIDI in/out</span>
-        <span class="tag osc">OSC send/recv</span>
-      </div>
-
-      <div class="box node mode-only" data-mode="Mode B" id="devjs" style="min-width:300px;">
-        <div class="box-title">src/dev_controller.js  — Web controller</div>
-        <div class="box-sub">
-          HTTP server on :3000 → serves dev-controller.html<br>
-          POST /api/action { action, slot } → handleAction()<br>
-          GET  /api/state  → full controller state JSON<br><br>
-          Also opens MIDI input for clock only (XONE by default)<br>
-          clock ticks → MidiClockTracker → TempoSource<br><br>
-          Calls createController() → OscTransport
-        </div>
-        <span class="tag http">HTTP :3000</span>
-        <span class="tag midi">clock only</span>
-        <span class="tag osc">OSC send/recv</span>
-      </div>
-
-      <div class="box node" id="slot-controller" style="min-width:260px;">
-        <div class="box-title">controller/slot_controller.js</div>
-        <div class="box-sub">
-          Shared by both modes.<br><br>
-          State machine per slot: EMPTY→REC→PLAYING→STOPPED<br>
-          tapSlot / clearSlot / cropSlot / cropStartSlot<br>
-          resetSlot / autoLoopSlot / multiplySlotLength<br>
-          selectInputSource / applyPdState<br><br>
-          Hold detection (500ms) for clear<br>
-          Play-on-release (default) or play-on-press
-        </div>
-        <span class="tag shared">shared</span>
-      </div>
-
-      <div class="box node" id="osc-transport" style="min-width:200px;">
-        <div class="box-title">controller/osc_transport.js</div>
-        <div class="box-sub">
-          node-osc Client → sends to :9000<br>
-          node-osc Server → listens on :9001<br>
-          /state messages → applyPdState callback
-        </div>
-        <span class="tag osc">UDP</span>
-      </div>
-
-      <div class="box node" id="tempo" style="min-width:200px;">
-        <div class="box-title">controller/tempo.js</div>
-        <div class="box-sub">
-          MidiClockTracker — 24 ppqn → BPM<br>
-          TapTempoTracker  — manual tap fallback<br>
-          TempoSource      — priority: clock > tap<br><br>
-          Used for autoLoop beat quantisation
-        </div>
-        <span class="tag midi">MIDI clock</span>
-      </div>
-
-      <div class="box node mode-only" data-mode="Linux" id="jack-router" style="min-width:200px;">
-        <div class="box-title">controller/jack_capture_router.js</div>
-        <div class="box-sub">
-          Runs jack_connect / jack_disconnect<br>
-          Switches live audio source between<br>
-          configured JACK capture port pairs
-        </div>
-        <span class="tag linux">Linux only</span>
-        <span class="tag audio">JACK</span>
-      </div>
-
+  <!-- Audio routing -->
+  <div class="box jack mode-only" data-mode="Linux / Pi" id="jack" style="min-width:320px;">
+    <div class="box-title">JACK Audio Server</div>
+    <div class="box-sub">
+      jackd -d alsa -d hw:&lt;card&gt; -r 48000 -p 128 -n 2<br><br>
+      <strong>Connections wired by start.sh:</strong><br>
+      system:capture_9  → pure_data:input_1<br>
+      system:capture_10 → pure_data:input_2<br>
+      pure_data:output_1 → system:playback_1<br>
+      pure_data:output_2 → system:playback_2
     </div>
+    <span class="tag audio">low-latency ~5ms</span>
+    <span class="tag linux">Linux only</span>
   </div>
-  <hr class="layer-divider">
 
-  <!-- LAYER: Web UI -->
-  <div class="layer">
-    <div class="layer-label">Web UI</div>
-    <div class="layer-content">
-
-      <div class="box web mode-only" data-mode="Mode B" id="browser" style="min-width:320px;">
-        <div class="box-title">Browser — public/dev-controller.html</div>
-        <div class="box-sub">
-          Polls GET /api/state every ~500ms for slot status<br><br>
-          Buttons emit POST /api/action:<br>
-          tap | clear | reset | cropUp/Down | cropStartUp/Down<br>
-          half | double | autoLoop:1beat/2beat/4beat/2bar<br>
-          monitor | tapTempo | source:&lt;id&gt;<br><br>
-          Displays: slot state pill, loop length ms, crop offsets, BPM
-        </div>
-        <span class="tag http">HTTP :3000</span>
-      </div>
-
-      <div class="box web" id="config-files" style="min-width:260px;">
-        <div class="box-title">config/midi/*.json</div>
-        <div class="box-sub">
-          xone-px5.json    — XONE button/CC layout<br>
-          traktor-x1mk3.json — X1MK3 button/CC layout<br>
-          web.json         — virtual (no MIDI device)<br>
-          osc.json         — OSC-only control<br><br>
-          Loaded by getRuntimeConfig() in config.js<br>
-          Selects device match string + note/CC mappings
-        </div>
-        <span class="tag shared">config</span>
-      </div>
-
-      <div class="box web" id="startsh" style="min-width:260px;">
-        <div class="box-title">start.sh</div>
-        <div class="box-sub">
-          Orchestrates startup sequence:<br>
-          1. eval runtime_config.js --shell (exports env vars)<br>
-          2. Linux: start jackd, wait for ports<br>
-          3. Linux: open Pd headless (-nogui -jack -nomidi)<br>
-          4. Mac: open Pd GUI via <code>open</code><br>
-          5. jack_connect audio ports (Linux)<br>
-          6. Start index.js or dev_controller.js<br><br>
-          Flags: --stop | --status | --appliance | --restart-jack
-        </div>
-        <span class="tag process">process mgr</span>
-      </div>
-
+  <div class="box jack mode-only" data-mode="Mac" id="mac-audio" style="min-width:240px;">
+    <div class="box-title">Core Audio (Mac)</div>
+    <div class="box-sub">
+      Pure Data uses native audio directly<br>
+      Runtime patch sets adc~ 9 10 / dac~ 1 2<br>
+      No JACK needed
     </div>
+    <span class="tag audio">native</span>
+    <span class="tag mac">Mac only</span>
+  </div>
+
+  <!-- Audio engine -->
+  <div class="box pd" id="pd-engine" style="min-width:340px;">
+    <div class="box-title">Pure Data — engine.pd</div>
+    <div class="box-sub">
+      Thin host patch: OSC parse/route, audio I/O, slot sum, netsend<br><br>
+      OSC in:  <span class="port">netreceive -u -b 9000</span><br>
+      OSC out: <span class="port">netsend -u -b 127.0.0.1:9001</span><br><br>
+      Routes: slot1 | slot2 | monitor | connect<br>
+      Audio: adc~ 1 2 → slots → dac~ 1 2 (+ monitor)
+    </div>
+    <span class="tag osc">UDP :9000 in</span>
+    <span class="tag osc">UDP :9001 out</span>
+    <span class="tag audio">DSP</span>
+  </div>
+
+  <div class="box pd" id="pd-slot" style="min-width:280px;">
+    <div class="box-title">looper_slot.pd  ×2  (slot1, slot2)</div>
+    <div class="box-sub">
+      Per-slot abstraction. Instantiated by engine.pd.<br><br>
+      Inlets:  L audio | R audio | control msgs<br>
+      Outlets: L loop  | R loop  | /state OSC<br><br>
+      Handles: record → phasor playback → crop start/end<br>
+      → anti-click envelope → clear → /state emit<br><br>
+      Arrays: $1_data / $1_data_R  (960 000 samples = 20s @ 48kHz)
+    </div>
+    <span class="tag audio">stereo</span>
+    <span class="tag osc">/state out</span>
+  </div>
+
+  <!-- Controller -->
+  <div class="box node mode-only" data-mode="Mode A" id="indexjs" style="min-width:300px;">
+    <div class="box-title">src/index.js  — MIDI controller</div>
+    <div class="box-sub">
+      Opens physical MIDI input via <code>easymidi</code><br>
+      Sends LED note-on/off to MIDI output<br><br>
+      MIDI events → slot actions:<br>
+      noteon/noteoff → tap / hold-to-clear / monitor<br>
+      CC → crop end / crop start / move (encoder turn)<br>
+      encoder press → reset<br>
+      clock ticks → MidiClockTracker → TempoSource<br><br>
+      Calls createController() → OscTransport
+    </div>
+    <span class="tag midi">MIDI in/out</span>
+    <span class="tag osc">OSC send/recv</span>
+  </div>
+
+  <div class="box node mode-only" data-mode="Mode B" id="devjs" style="min-width:300px;">
+    <div class="box-title">src/dev_controller.js  — Web controller</div>
+    <div class="box-sub">
+      HTTP server on :3000 → serves dev-controller.html<br>
+      POST /api/action { action, slot } → handleAction()<br>
+      GET  /api/state  → full controller state JSON<br><br>
+      Also opens MIDI input for clock only (XONE by default)<br>
+      clock ticks → MidiClockTracker → TempoSource<br><br>
+      Calls createController() → OscTransport
+    </div>
+    <span class="tag http">HTTP :3000</span>
+    <span class="tag midi">clock only</span>
+    <span class="tag osc">OSC send/recv</span>
+  </div>
+
+  <div class="box node" id="slot-controller" style="min-width:260px;">
+    <div class="box-title">controller/slot_controller.js</div>
+    <div class="box-sub">
+      Shared by both modes.<br><br>
+      State machine per slot: EMPTY→REC→PLAYING→STOPPED<br>
+      tapSlot / clearSlot / cropSlot / cropStartSlot<br>
+      moveSlot / resetSlot / autoLoopSlot / multiplySlotLength<br>
+      selectInputSource / applyPdState<br><br>
+      Hold detection (500ms) for clear<br>
+      Play-on-release (default) or play-on-press
+    </div>
+    <span class="tag shared">shared</span>
+  </div>
+
+  <div class="box node" id="osc-transport" style="min-width:200px;">
+    <div class="box-title">controller/osc_transport.js</div>
+    <div class="box-sub">
+      node-osc Client → sends to :9000<br>
+      node-osc Server → listens on :9001<br>
+      /state messages → applyPdState callback
+    </div>
+    <span class="tag osc">UDP</span>
+  </div>
+
+  <div class="box node" id="tempo" style="min-width:200px;">
+    <div class="box-title">controller/tempo.js</div>
+    <div class="box-sub">
+      MidiClockTracker — 24 ppqn → BPM<br>
+      TapTempoTracker  — manual tap fallback<br>
+      TempoSource      — priority: clock > tap<br><br>
+      Used for autoLoop beat quantisation
+    </div>
+    <span class="tag midi">MIDI clock</span>
+  </div>
+
+  <div class="box node mode-only" data-mode="Linux" id="jack-router" style="min-width:200px;">
+    <div class="box-title">controller/jack_capture_router.js</div>
+    <div class="box-sub">
+      Runs jack_connect / jack_disconnect<br>
+      Switches live audio source between<br>
+      configured JACK capture port pairs
+    </div>
+    <span class="tag linux">Linux only</span>
+    <span class="tag audio">JACK</span>
+  </div>
+
+  <!-- Web UI / Config -->
+  <div class="box web mode-only" data-mode="Mode B" id="browser" style="min-width:320px;">
+    <div class="box-title">Browser — public/dev-controller.html</div>
+    <div class="box-sub">
+      Polls GET /api/state every ~500ms for slot status<br><br>
+      Buttons emit POST /api/action:<br>
+      tap | clear | reset | cropUp/Down | cropStartUp/Down<br>
+      moveUp/Down | half | double | autoLoop:1beat/2beat/4beat/2bar<br>
+      monitor | tapTempo | source:&lt;id&gt;<br><br>
+      Displays: slot state pill, loop length ms, crop offsets, BPM
+    </div>
+    <span class="tag http">HTTP :3000</span>
+  </div>
+
+  <div class="box web" id="config-files" style="min-width:260px;">
+    <div class="box-title">config/midi/*.json</div>
+    <div class="box-sub">
+      xone-px5.json    — XONE button/CC layout<br>
+      traktor-x1mk3.json — X1MK3 button/CC layout<br>
+      web.json         — virtual (no MIDI device)<br>
+      osc.json         — OSC-only control<br><br>
+      Loaded by getRuntimeConfig() in config.js<br>
+      Selects device match string + note/CC mappings
+    </div>
+    <span class="tag shared">config</span>
+  </div>
+
+  <div class="box web" id="startsh" style="min-width:260px;">
+    <div class="box-title">start.sh</div>
+    <div class="box-sub">
+      Orchestrates startup sequence:<br>
+      1. eval runtime_config.js --shell (exports env vars)<br>
+      2. Linux: start jackd, wait for ports<br>
+      3. Linux: open Pd headless (-nogui -jack -nomidi)<br>
+      4. Mac: open Pd GUI via <code>open</code><br>
+      5. jack_connect audio ports (Linux)<br>
+      6. Start index.js or dev_controller.js<br><br>
+      Flags: --stop | --status | --appliance | --restart-jack
+    </div>
+    <span class="tag process">process mgr</span>
   </div>
 
 </div><!-- /canvas -->
@@ -544,105 +500,184 @@
 </div>
 
 <script>
-// Draw arrows between boxes using the SVG overlay.
-// Each arrow: { from: id, to: id, label, color, style }
-const arrows = [
-  // Audio path (hardware)
-  { from: 'xone',         to: 'jack',         label: 'USB audio\nch 9–10 in / 1–2 out', color: '#22d3ee', dashed: false },
-  { from: 'jack',         to: 'pd-engine',    label: 'pure_data:input_1/2', color: '#22d3ee' },
-  { from: 'pd-engine',    to: 'jack',         label: 'pure_data:output_1/2', color: '#22d3ee', offset: 12 },
-  { from: 'jack',         to: 'speakers',     label: 'playback', color: '#22d3ee' },
-  // Mac audio
-  { from: 'xone',         to: 'mac-audio',    label: 'USB audio', color: '#22d3ee', dashed: true },
-  { from: 'mac-audio',    to: 'pd-engine',    label: 'adc~ 9 10 / dac~ 1 2', color: '#22d3ee', dashed: true },
+const STORAGE_KEY = 'slooper-arch-layout';
 
-  // MIDI hardware
-  { from: 'x1mk3',        to: 'indexjs',      label: 'MIDI notes/CC', color: '#f59e0b' },
-  { from: 'xone',         to: 'indexjs',      label: 'MIDI clock', color: '#f59e0b', dashed: true },
-  { from: 'xone',         to: 'devjs',        label: 'MIDI clock', color: '#f59e0b', dashed: true },
-  { from: 'indexjs',      to: 'x1mk3',        label: 'LED note-on/off', color: '#f59e0b', offset: 10 },
+const DEFAULT_POSITIONS = {
+  xone:            { left:  20, top:  20 },
+  x1mk3:           { left: 290, top:  20 },
+  speakers:        { left: 560, top:  20 },
+  jack:            { left:  20, top: 220 },
+  'mac-audio':     { left: 400, top: 220 },
+  'pd-engine':     { left:  20, top: 440 },
+  'pd-slot':       { left: 430, top: 440 },
+  indexjs:         { left:  20, top: 680 },
+  devjs:           { left: 390, top: 680 },
+  'slot-controller':{ left: 760, top: 680 },
+  'osc-transport': { left:1080, top: 680 },
+  tempo:           { left:1340, top: 680 },
+  'jack-router':   { left:1080, top: 880 },
+  browser:         { left:  20, top:1080 },
+  'config-files':  { left: 420, top:1080 },
+  startsh:         { left: 750, top:1080 },
+};
+
+function applyPositions(positions) {
+  for (const [id, pos] of Object.entries(positions)) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.style.left = pos.left + 'px';
+      el.style.top  = pos.top  + 'px';
+    }
+  }
+}
+
+function saveLayout() {
+  const positions = {};
+  for (const id of Object.keys(DEFAULT_POSITIONS)) {
+    const el = document.getElementById(id);
+    if (el) {
+      positions[id] = {
+        left: parseInt(el.style.left, 10),
+        top:  parseInt(el.style.top,  10),
+      };
+    }
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(positions));
+}
+
+function loadLayout() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch (_) {}
+  return null;
+}
+
+function resetLayout() {
+  localStorage.removeItem(STORAGE_KEY);
+  applyPositions(DEFAULT_POSITIONS);
+  drawArrows();
+}
+
+// Apply saved or default positions on load
+applyPositions(loadLayout() || DEFAULT_POSITIONS);
+
+// ── Drag ──────────────────────────────────────────────────────────────────────
+let dragEl = null, dragOffX = 0, dragOffY = 0;
+
+document.querySelectorAll('.box').forEach(el => {
+  el.addEventListener('mousedown', e => {
+    dragEl = el;
+    const cr = document.getElementById('canvas').getBoundingClientRect();
+    const er = el.getBoundingClientRect();
+    dragOffX = e.clientX - er.left;
+    dragOffY = e.clientY - er.top;
+    el.classList.add('dragging');
+    e.preventDefault();
+  });
+});
+
+document.addEventListener('mousemove', e => {
+  if (!dragEl) return;
+  const cr = document.getElementById('canvas').getBoundingClientRect();
+  dragEl.style.left = Math.max(0, e.clientX - cr.left - dragOffX) + 'px';
+  dragEl.style.top  = Math.max(0, e.clientY - cr.top  - dragOffY) + 'px';
+  drawArrows();
+});
+
+document.addEventListener('mouseup', () => {
+  if (!dragEl) return;
+  dragEl.classList.remove('dragging');
+  dragEl = null;
+  saveLayout();
+});
+
+// ── Arrows ────────────────────────────────────────────────────────────────────
+const arrows = [
+  // Audio path
+  { from: 'xone',          to: 'jack',            label: 'USB audio\nch 9–10 in / 1–2 out', color: '#22d3ee' },
+  { from: 'jack',          to: 'pd-engine',        label: 'pure_data:input_1/2',              color: '#22d3ee' },
+  { from: 'pd-engine',     to: 'jack',             label: 'pure_data:output_1/2',             color: '#22d3ee', offset: 12 },
+  { from: 'jack',          to: 'speakers',         label: 'playback',                         color: '#22d3ee' },
+  { from: 'xone',          to: 'mac-audio',        label: 'USB audio',                        color: '#22d3ee', dashed: true },
+  { from: 'mac-audio',     to: 'pd-engine',        label: 'adc~ 9 10 / dac~ 1 2',            color: '#22d3ee', dashed: true },
+
+  // MIDI
+  { from: 'x1mk3',         to: 'indexjs',          label: 'MIDI notes/CC',                    color: '#f59e0b' },
+  { from: 'xone',          to: 'indexjs',          label: 'MIDI clock',                       color: '#f59e0b', dashed: true },
+  { from: 'xone',          to: 'devjs',            label: 'MIDI clock',                       color: '#f59e0b', dashed: true },
+  { from: 'indexjs',       to: 'x1mk3',            label: 'LED note-on/off',                  color: '#f59e0b', offset: 10 },
 
   // OSC
-  { from: 'osc-transport', to: 'pd-engine',   label: 'UDP :9000\n/slotX rec|play|crop…', color: '#a78bfa' },
-  { from: 'pd-engine',     to: 'osc-transport', label: 'UDP :9001\n/state slotX …', color: '#a78bfa', offset: 12 },
+  { from: 'osc-transport', to: 'pd-engine',        label: 'UDP :9000\n/slotX rec|play|crop…', color: '#a78bfa' },
+  { from: 'pd-engine',     to: 'osc-transport',    label: 'UDP :9001\n/state slotX …',        color: '#a78bfa', offset: 12 },
 
   // Node internal
-  { from: 'indexjs',      to: 'slot-controller', label: 'calls', color: '#34d399', dashed: true },
-  { from: 'devjs',        to: 'slot-controller', label: 'calls', color: '#34d399', dashed: true },
-  { from: 'slot-controller', to: 'osc-transport', label: 'send()', color: '#34d399', dashed: true },
-  { from: 'slot-controller', to: 'tempo',       label: 'getBpm()', color: '#34d399', dashed: true },
-  { from: 'slot-controller', to: 'jack-router', label: 'selectSource()', color: '#34d399', dashed: true },
-  { from: 'indexjs',      to: 'tempo',        label: 'tick()', color: '#f59e0b', dashed: true },
-  { from: 'devjs',        to: 'tempo',        label: 'tick()', color: '#f59e0b', dashed: true },
+  { from: 'indexjs',       to: 'slot-controller',  label: 'calls',                            color: '#34d399', dashed: true },
+  { from: 'devjs',         to: 'slot-controller',  label: 'calls',                            color: '#34d399', dashed: true },
+  { from: 'slot-controller', to: 'osc-transport',  label: 'send()',                           color: '#34d399', dashed: true },
+  { from: 'slot-controller', to: 'tempo',          label: 'getBpm()',                         color: '#34d399', dashed: true },
+  { from: 'slot-controller', to: 'jack-router',    label: 'selectSource()',                   color: '#34d399', dashed: true },
+  { from: 'indexjs',       to: 'tempo',            label: 'tick()',                            color: '#f59e0b', dashed: true },
+  { from: 'devjs',         to: 'tempo',            label: 'tick()',                            color: '#f59e0b', dashed: true },
 
-  // HTTP / Web
-  { from: 'browser',      to: 'devjs',        label: 'POST /api/action\nGET /api/state', color: '#34d399' },
-  { from: 'devjs',        to: 'browser',      label: 'HTML + JSON state', color: '#34d399', offset: 12 },
+  // HTTP
+  { from: 'browser',       to: 'devjs',            label: 'POST /api/action\nGET /api/state', color: '#34d399' },
+  { from: 'devjs',         to: 'browser',          label: 'HTML + JSON state',                color: '#34d399', offset: 12 },
 
   // Pd internal
-  { from: 'pd-engine',    to: 'pd-slot',      label: 'instantiates ×2\naudio + control', color: '#a78bfa', dashed: true },
+  { from: 'pd-engine',     to: 'pd-slot',          label: 'instantiates ×2\naudio + control', color: '#a78bfa', dashed: true },
 
   // Config
-  { from: 'config-files', to: 'indexjs',      label: 'midi map', color: '#fbbf24', dashed: true },
-  { from: 'config-files', to: 'devjs',        label: 'midi map', color: '#fbbf24', dashed: true },
+  { from: 'config-files',  to: 'indexjs',          label: 'midi map',                         color: '#fbbf24', dashed: true },
+  { from: 'config-files',  to: 'devjs',            label: 'midi map',                         color: '#fbbf24', dashed: true },
 
   // start.sh
-  { from: 'startsh',      to: 'jack',         label: 'spawns (Linux)', color: '#f87171', dashed: true },
-  { from: 'startsh',      to: 'pd-engine',    label: 'spawns pd', color: '#f87171', dashed: true },
-  { from: 'startsh',      to: 'indexjs',      label: 'spawns (mode A)', color: '#f87171', dashed: true },
-  { from: 'startsh',      to: 'devjs',        label: 'spawns (mode B)', color: '#f87171', dashed: true },
+  { from: 'startsh',       to: 'jack',             label: 'spawns (Linux)',                   color: '#f87171', dashed: true },
+  { from: 'startsh',       to: 'pd-engine',        label: 'spawns pd',                        color: '#f87171', dashed: true },
+  { from: 'startsh',       to: 'indexjs',          label: 'spawns (mode A)',                  color: '#f87171', dashed: true },
+  { from: 'startsh',       to: 'devjs',            label: 'spawns (mode B)',                  color: '#f87171', dashed: true },
 ];
 
-function center(el) {
-  const canvasRect = document.getElementById('canvas').getBoundingClientRect();
-  const r = el.getBoundingClientRect();
+function boxRect(el) {
+  const cr = document.getElementById('canvas').getBoundingClientRect();
+  const r  = el.getBoundingClientRect();
   return {
-    x: r.left - canvasRect.left + r.width / 2,
-    y: r.top - canvasRect.top + r.height / 2,
-    left: r.left - canvasRect.left,
-    right: r.right - canvasRect.left,
-    top: r.top - canvasRect.top,
-    bottom: r.bottom - canvasRect.top,
-    w: r.width,
-    h: r.height,
+    x:      r.left - cr.left + r.width  / 2,
+    y:      r.top  - cr.top  + r.height / 2,
+    left:   r.left - cr.left,
+    right:  r.right  - cr.left,
+    top:    r.top  - cr.top,
+    bottom: r.bottom - cr.top,
   };
 }
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
 function edgePoint(box, target) {
-  // Return the point on box's edge closest to target center
-  const cx = box.x, cy = box.y;
-  const tx = target.x, ty = target.y;
-  const dx = tx - cx, dy = ty - cy;
-  const ex = clamp(cx + dx * 0.999, box.left + 2, box.right - 2);
-  const ey = clamp(cy + dy * 0.999, box.top + 2, box.bottom - 2);
-  // Snap to nearest edge
   const dists = [
-    { side: 'top',    x: clamp(tx, box.left, box.right), y: box.top },
-    { side: 'bottom', x: clamp(tx, box.left, box.right), y: box.bottom },
-    { side: 'left',   x: box.left,  y: clamp(ty, box.top, box.bottom) },
-    { side: 'right',  x: box.right, y: clamp(ty, box.top, box.bottom) },
+    { x: clamp(target.x, box.left, box.right), y: box.top    },
+    { x: clamp(target.x, box.left, box.right), y: box.bottom },
+    { x: box.left,  y: clamp(target.y, box.top, box.bottom) },
+    { x: box.right, y: clamp(target.y, box.top, box.bottom) },
   ];
-  return dists.sort((a, b) => {
-    const da = Math.hypot(a.x - tx, a.y - ty);
-    const db = Math.hypot(b.x - tx, b.y - ty);
-    return da - db;
-  })[0];
+  return dists.sort((a, b) =>
+    Math.hypot(a.x - target.x, a.y - target.y) -
+    Math.hypot(b.x - target.x, b.y - target.y)
+  )[0];
 }
 
 function drawArrows() {
-  const svg = document.getElementById('arrows');
+  const svg    = document.getElementById('arrows');
   const canvas = document.getElementById('canvas');
-  const cr = canvas.getBoundingClientRect();
+  const cr     = canvas.getBoundingClientRect();
   svg.setAttribute('viewBox', `0 0 ${cr.width} ${cr.height}`);
   svg.innerHTML = '';
 
-  // defs
-  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  const defs   = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
   const colors = [...new Set(arrows.map(a => a.color))];
   colors.forEach(color => {
-    const hex = color.replace('#', '');
+    const hex    = color.replace('#', '');
     const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
     marker.setAttribute('id', `arrow-${hex}`);
     marker.setAttribute('markerWidth', '8');
@@ -650,42 +685,38 @@ function drawArrows() {
     marker.setAttribute('refX', '6');
     marker.setAttribute('refY', '3');
     marker.setAttribute('orient', 'auto');
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', 'M0,0 L0,6 L8,3 z');
-    path.setAttribute('fill', color);
-    marker.appendChild(path);
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', 'M0,0 L0,6 L8,3 z');
+    p.setAttribute('fill', color);
+    marker.appendChild(p);
     defs.appendChild(marker);
   });
   svg.appendChild(defs);
 
   arrows.forEach(({ from, to, label, color, dashed, offset = 0 }) => {
     const fromEl = document.getElementById(from);
-    const toEl = document.getElementById(to);
+    const toEl   = document.getElementById(to);
     if (!fromEl || !toEl) return;
 
-    const fb = center(fromEl);
-    const tb = center(toEl);
-
+    const fb  = boxRect(fromEl);
+    const tb  = boxRect(toEl);
     const ep1 = edgePoint(fb, tb);
     const ep2 = edgePoint(tb, fb);
 
-    // Offset perpendicular for bidirectional arrows
-    const dx = ep2.x - ep1.x, dy = ep2.y - ep1.y;
+    const dx  = ep2.x - ep1.x, dy = ep2.y - ep1.y;
     const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len * offset, ny = dx / len * offset;
+    const nx  = -dy / len * offset, ny = dx / len * offset;
 
     const x1 = ep1.x + nx, y1 = ep1.y + ny;
     const x2 = ep2.x + nx, y2 = ep2.y + ny;
-
-    // Curved path
     const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-    const curveStrength = 0.15;
-    const cx1 = x1 + (mx - x1) * 0.5 + ny * curveStrength * 40;
-    const cy1 = y1 + (my - y1) * 0.5 - nx * curveStrength * 40;
-    const cx2 = x2 + (mx - x2) * 0.5 + ny * curveStrength * 40;
-    const cy2 = y2 + (my - y2) * 0.5 - nx * curveStrength * 40;
+    const cs = 0.15;
+    const cx1 = x1 + (mx - x1) * 0.5 + ny * cs * 40;
+    const cy1 = y1 + (my - y1) * 0.5 - nx * cs * 40;
+    const cx2 = x2 + (mx - x2) * 0.5 + ny * cs * 40;
+    const cy2 = y2 + (my - y2) * 0.5 - nx * cs * 40;
 
-    const hex = color.replace('#', '');
+    const hex  = color.replace('#', '');
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', `M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`);
     path.setAttribute('stroke', color);
@@ -696,34 +727,32 @@ function drawArrows() {
     if (dashed) path.setAttribute('stroke-dasharray', '4 3');
     svg.appendChild(path);
 
-    // Label at midpoint
     if (label) {
-      const lx = mx + ny * curveStrength * 40;
-      const ly = my - nx * curveStrength * 40;
+      const lx    = mx + ny * cs * 40;
+      const ly    = my - nx * cs * 40;
       const lines = label.split('\n');
-      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      const g     = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
-      // background rect
-      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       const maxLen = Math.max(...lines.map(l => l.length));
-      bg.setAttribute('x', lx - maxLen * 3.2);
-      bg.setAttribute('y', ly - 9 * lines.length + 2);
-      bg.setAttribute('width', maxLen * 6.4);
-      bg.setAttribute('height', 9 * lines.length + 4);
-      bg.setAttribute('fill', '#0f1117');
-      bg.setAttribute('rx', '3');
+      const bg     = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      bg.setAttribute('x',       lx - maxLen * 3.2);
+      bg.setAttribute('y',       ly - 9 * lines.length + 2);
+      bg.setAttribute('width',   maxLen * 6.4);
+      bg.setAttribute('height',  9 * lines.length + 4);
+      bg.setAttribute('fill',    '#0f1117');
+      bg.setAttribute('rx',      '3');
       bg.setAttribute('opacity', '0.85');
       g.appendChild(bg);
 
       lines.forEach((line, i) => {
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', lx);
-        text.setAttribute('y', ly - 9 * (lines.length - 1 - i) + 6);
+        text.setAttribute('x',           lx);
+        text.setAttribute('y',           ly - 9 * (lines.length - 1 - i) + 6);
         text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('font-size', '9');
+        text.setAttribute('font-size',   '9');
         text.setAttribute('font-family', 'SF Mono, Fira Code, monospace');
-        text.setAttribute('fill', color);
-        text.setAttribute('opacity', '0.9');
+        text.setAttribute('fill',        color);
+        text.setAttribute('opacity',     '0.9');
         text.textContent = line;
         g.appendChild(text);
       });
@@ -733,13 +762,8 @@ function drawArrows() {
   });
 }
 
-// Wait for layout then draw
-window.addEventListener('load', () => {
-  setTimeout(drawArrows, 100);
-});
-window.addEventListener('resize', () => {
-  drawArrows();
-});
+window.addEventListener('load',   () => setTimeout(drawArrows, 100));
+window.addEventListener('resize', drawArrows);
 </script>
 </body>
 </html>
