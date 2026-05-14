@@ -52,6 +52,35 @@
     gap: 8px;
     font-size: 11px;
     color: #94a3b8;
+    cursor: pointer;
+    user-select: none;
+  }
+  .legend-item input[type="checkbox"] {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border: 1px solid #475569;
+    border-radius: 2px;
+    background: #1e293b;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .legend-item input[type="checkbox"]:checked {
+    background: #334155;
+    border-color: #64748b;
+  }
+  .legend-item input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 2px; top: 0px;
+    width: 5px; height: 8px;
+    border: 1.5px solid #94a3b8;
+    border-left: none; border-top: none;
+    transform: rotate(45deg);
+  }
+  .legend-item.dimmed {
+    opacity: 0.35;
   }
   .legend-line {
     width: 32px;
@@ -245,11 +274,11 @@
 
 <div class="topbar">
   <div class="legend">
-    <div class="legend-item"><div class="legend-line audio"></div> Audio (JACK / DAC)</div>
-    <div class="legend-item"><div class="legend-line midi"></div> MIDI (USB)</div>
-    <div class="legend-item"><div class="legend-line osc"></div> OSC (UDP)</div>
-    <div class="legend-item"><div class="legend-line http"></div> HTTP / WebSocket</div>
-    <div class="legend-item"><div class="legend-line process"></div> Process spawn</div>
+    <label class="legend-item"><input type="checkbox" id="filter-audio"   checked onchange="applyFilters()"><div class="legend-line audio"></div> Audio (JACK / DAC)</label>
+    <label class="legend-item"><input type="checkbox" id="filter-midi"    checked onchange="applyFilters()"><div class="legend-line midi"></div> MIDI (USB)</label>
+    <label class="legend-item"><input type="checkbox" id="filter-osc"     checked onchange="applyFilters()"><div class="legend-line osc"></div> OSC (UDP)</label>
+    <label class="legend-item"><input type="checkbox" id="filter-http"    checked onchange="applyFilters()"><div class="legend-line http"></div> HTTP / WebSocket</label>
+    <label class="legend-item"><input type="checkbox" id="filter-process" checked onchange="applyFilters()"><div class="legend-line process"></div> Process spawn</label>
   </div>
   <button class="btn-reset" onclick="resetLayout()">Reset layout</button>
 </div>
@@ -556,11 +585,60 @@ function loadLayout() {
 function resetLayout() {
   localStorage.removeItem(STORAGE_KEY);
   applyPositions(DEFAULT_POSITIONS);
-  drawArrows();
+  applyFilters();
 }
 
 // Apply saved or default positions on load
 applyPositions(loadLayout() || DEFAULT_POSITIONS);
+
+// ── Filter types ──────────────────────────────────────────────────────────────
+const TYPE_COLORS = {
+  audio:   '#22d3ee',
+  midi:    '#f59e0b',
+  osc:     '#a78bfa',
+  http:    '#34d399',
+  process: '#f87171',
+};
+const COLOR_TO_TYPE = Object.fromEntries(
+  Object.entries(TYPE_COLORS).map(([t, c]) => [c, t])
+);
+
+function getSelectedTypes() {
+  return new Set(
+    Object.keys(TYPE_COLORS).filter(t => document.getElementById('filter-' + t)?.checked)
+  );
+}
+
+function applyFilters() {
+  const selected = getSelectedTypes();
+
+  // Update legend item dimming
+  for (const type of Object.keys(TYPE_COLORS)) {
+    const label = document.getElementById('filter-' + type)?.closest('.legend-item');
+    if (label) label.classList.toggle('dimmed', !selected.has(type));
+  }
+
+  // Build map of boxId → set of types it participates in
+  const boxTypes = {};
+  for (const arrow of arrows) {
+    const type = COLOR_TO_TYPE[arrow.color];
+    if (!type) continue;
+    (boxTypes[arrow.from] ??= new Set()).add(type);
+    (boxTypes[arrow.to]   ??= new Set()).add(type);
+  }
+
+  // Show/hide boxes: visible only if they have ≥1 connection of a selected type
+  for (const id of Object.keys(DEFAULT_POSITIONS)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const types = boxTypes[id] || new Set();
+    // Boxes with no typed connections (e.g. config-files) are always shown
+    const visible = types.size === 0 || [...types].some(t => selected.has(t));
+    el.style.display = visible ? '' : 'none';
+  }
+
+  drawArrows();
+}
 
 // ── Drag ──────────────────────────────────────────────────────────────────────
 let dragEl = null, dragOffX = 0, dragOffY = 0;
@@ -582,7 +660,7 @@ document.addEventListener('mousemove', e => {
   const cr = document.getElementById('canvas').getBoundingClientRect();
   dragEl.style.left = Math.max(0, e.clientX - cr.left - dragOffX) + 'px';
   dragEl.style.top  = Math.max(0, e.clientY - cr.top  - dragOffY) + 'px';
-  drawArrows();
+  drawArrows();  // arrows-only redraw during drag for performance
 });
 
 document.addEventListener('mouseup', () => {
@@ -668,6 +746,12 @@ function edgePoint(box, target) {
 }
 
 function drawArrows() {
+  const selected      = getSelectedTypes();
+  const visibleArrows = arrows.filter(a => {
+    const type = COLOR_TO_TYPE[a.color];
+    return !type || selected.has(type);
+  });
+
   const svg    = document.getElementById('arrows');
   const canvas = document.getElementById('canvas');
   const cr     = canvas.getBoundingClientRect();
@@ -675,7 +759,7 @@ function drawArrows() {
   svg.innerHTML = '';
 
   const defs   = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-  const colors = [...new Set(arrows.map(a => a.color))];
+  const colors = [...new Set(visibleArrows.map(a => a.color))];
   colors.forEach(color => {
     const hex    = color.replace('#', '');
     const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
@@ -693,7 +777,7 @@ function drawArrows() {
   });
   svg.appendChild(defs);
 
-  arrows.forEach(({ from, to, label, color, dashed, offset = 0 }) => {
+  visibleArrows.forEach(({ from, to, label, color, dashed, offset = 0 }) => {
     const fromEl = document.getElementById(from);
     const toEl   = document.getElementById(to);
     if (!fromEl || !toEl) return;
@@ -762,8 +846,8 @@ function drawArrows() {
   });
 }
 
-window.addEventListener('load',   () => setTimeout(drawArrows, 100));
-window.addEventListener('resize', drawArrows);
+window.addEventListener('load',   () => setTimeout(applyFilters, 100));
+window.addEventListener('resize', applyFilters);
 </script>
 </body>
 </html>
