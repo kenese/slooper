@@ -74,8 +74,8 @@ Example:
   "controls": {
     "slot1Button": { "type": "note", "note": 14, "channel": 15 },
     "slot2Button": { "type": "note", "note": 15, "channel": 15 },
-    "slot1Encoder": { "type": "cc", "controller": 7, "channel": 15, "mode": "relative-64" },
-    "slot2Encoder": { "type": "cc", "controller": 7, "channel": 15, "mode": "relative-64" },
+    "slot1EndEncoder": { "type": "cc", "controller": 7, "channel": 15, "mode": "relative-64" },
+    "slot2EndEncoder": { "type": "cc", "controller": 7, "channel": 15, "mode": "relative-64" },
     "slot1Reset": { "type": "note", "note": 28, "channel": 15 },
     "slot2Reset": { "type": "note", "note": 38, "channel": 15 },
     "monitorButton": { "type": "note", "note": 10, "channel": 15 }
@@ -87,8 +87,8 @@ Required control actions:
 
 - `slot1Button`
 - `slot2Button`
-- `slot1Encoder`
-- `slot2Encoder`
+- `slot1EndEncoder`
+- `slot2EndEncoder`
 - `slot1Reset`
 - `slot2Reset`
 - `monitorButton`

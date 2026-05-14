@@ -282,8 +282,8 @@ To add a new MIDI controller, copy `config/midi/example.json` and update the `ma
 
 - `slot1Button`
 - `slot2Button`
-- `slot1Encoder`
-- `slot2Encoder`
+- `slot1EndEncoder`
+- `slot2EndEncoder`
 - `slot1StartEncoder` (optional, for start crop)
 - `slot2StartEncoder` (optional, for start crop)
 - `slot1Reset`

@@ -176,8 +176,8 @@ test('rejects unsupported MIDI encoder modes', () => {
         controls: {
             slot1Button: { type: 'note', note: 1, channel: 0 },
             slot2Button: { type: 'note', note: 2, channel: 0 },
-            slot1Encoder: { type: 'cc', controller: 10, channel: 0, mode: 'absolute' },
-            slot2Encoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
+            slot1EndEncoder: { type: 'cc', controller: 10, channel: 0, mode: 'absolute' },
+            slot2EndEncoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
             slot1Reset: { type: 'note', note: 3, channel: 0 },
             slot2Reset: { type: 'note', note: 4, channel: 0 },
             monitorButton: { type: 'note', note: 5, channel: 0 },
@@ -203,8 +203,8 @@ test('loads optional start crop encoder controls when configured', () => {
         controls: {
             slot1Button: { type: 'note', note: 1, channel: 0 },
             slot2Button: { type: 'note', note: 2, channel: 0 },
-            slot1Encoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
-            slot2Encoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
+            slot1EndEncoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+            slot2EndEncoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
             slot1StartEncoder: { type: 'cc', controller: 12, channel: 0, mode: 'relative-64' },
             slot2StartEncoder: { type: 'cc', controller: 13, channel: 1, mode: 'relative-64' },
             slot1Reset: { type: 'note', note: 3, channel: 0 },
@@ -234,8 +234,8 @@ test('loads optional auto-loop, half, double, and tap note controls when configu
         controls: {
             slot1Button: { type: 'note', note: 1, channel: 0 },
             slot2Button: { type: 'note', note: 2, channel: 0 },
-            slot1Encoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
-            slot2Encoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
+            slot1EndEncoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+            slot2EndEncoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
             slot1Reset: { type: 'note', note: 3, channel: 0 },
             slot2Reset: { type: 'note', note: 4, channel: 0 },
             monitorButton: { type: 'note', note: 5, channel: 0 },
@@ -283,8 +283,8 @@ test('loads optional capture source MIDI note controls when configured', () => {
         controls: {
             slot1Button: { type: 'note', note: 1, channel: 0 },
             slot2Button: { type: 'note', note: 2, channel: 0 },
-            slot1Encoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
-            slot2Encoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
+            slot1EndEncoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+            slot2EndEncoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
             slot1Reset: { type: 'note', note: 3, channel: 0 },
             slot2Reset: { type: 'note', note: 4, channel: 0 },
             monitorButton: { type: 'note', note: 5, channel: 0 },

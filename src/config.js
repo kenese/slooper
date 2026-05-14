@@ -257,8 +257,8 @@ function validateMidiConfig(raw) {
     const controls = raw.controls || {};
     requireMidiControl(controls, 'slot1Button', 'note');
     requireMidiControl(controls, 'slot2Button', 'note');
-    requireMidiControl(controls, 'slot1Encoder', 'cc');
-    requireMidiControl(controls, 'slot2Encoder', 'cc');
+    requireMidiControl(controls, 'slot1EndEncoder', 'cc');
+    requireMidiControl(controls, 'slot2EndEncoder', 'cc');
     optionalMidiControl(controls, 'slot1StartEncoder', 'cc');
     optionalMidiControl(controls, 'slot2StartEncoder', 'cc');
     optionalMidiControl(controls, 'slot1MoveEncoder', 'cc');
@@ -336,9 +336,9 @@ function normalizeMidiConfig(raw) {
         slot1: {
             note: controls.slot1Button.note,
             channel: controls.slot1Button.channel,
-            encoderCC: controls.slot1Encoder.controller,
-            encoderChannel: controls.slot1Encoder.channel,
-            encoderMode: controls.slot1Encoder.mode,
+            encoderCC: controls.slot1EndEncoder.controller,
+            encoderChannel: controls.slot1EndEncoder.channel,
+            encoderMode: controls.slot1EndEncoder.mode,
             startEncoderCC: slot1StartEncoder.controller,
             startEncoderChannel: slot1StartEncoder.channel,
             startEncoderMode: slot1StartEncoder.mode,
@@ -352,9 +352,9 @@ function normalizeMidiConfig(raw) {
         slot2: {
             note: controls.slot2Button.note,
             channel: controls.slot2Button.channel,
-            encoderCC: controls.slot2Encoder.controller,
-            encoderChannel: controls.slot2Encoder.channel,
-            encoderMode: controls.slot2Encoder.mode,
+            encoderCC: controls.slot2EndEncoder.controller,
+            encoderChannel: controls.slot2EndEncoder.channel,
+            encoderMode: controls.slot2EndEncoder.mode,
             startEncoderCC: slot2StartEncoder.controller,
             startEncoderChannel: slot2StartEncoder.channel,
             startEncoderMode: slot2StartEncoder.mode,
