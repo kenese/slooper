@@ -418,13 +418,12 @@
   <div class="box node mode-only" data-mode="Mode B only" id="devjs" style="min-width:300px;">
     <div class="box-title">src/dev_controller.js  — Web controller</div>
     <div class="box-sub">
-      HTTP server on :3000 → serves dev-controller.html<br>
-      POST /api/action { action, slot } → handleAction()<br>
-      GET  /api/state  → full controller state JSON<br><br>
-      Also opens MIDI input for clock only (XONE by default)<br>
+      Delegates HTTP + WS to web_server.js<br>
+      controller.onStateChange = webServer.broadcast<br>
+      midiClock.onBeat → broadcast (BPM updates)<br><br>
+      Also opens MIDI input for clock only (X1MK3 by default)<br>
       clock ticks → MidiClockTracker → TempoSource<br><br>
-      Calls createController() → OscTransport<br>
-      Delegates HTTP to web_server.js
+      Calls createController() → OscTransport
     </div>
     <span class="tag http">HTTP :3000</span>
     <span class="tag midi">clock only</span>
@@ -432,21 +431,24 @@
   </div>
 
   <div class="box node" id="web-server-js" style="min-width:260px;">
-    <div class="box-title">controller/web_server.js</div>
+    <div class="box-title">src/controller/web_server.js</div>
     <div class="box-sub">
-      Shared HTTP server factory.<br><br>
+      Shared HTTP + WebSocket server factory.<br><br>
       GET  / → dev-controller.html<br>
       GET  /api/state → controller.getState()<br>
-      POST /api/action → handleAction()<br><br>
-      Returns { listen(port, host), close() }<br>
+      POST /api/action → handleAction() → broadcast()<br>
+      WS connect → sends current state immediately<br><br>
+      broadcast(state) → pushes to all WS clients<br>
+      Returns { broadcast, listen, close }<br>
       Used by index.js (--web) and dev_controller.js
     </div>
     <span class="tag http">HTTP :3000</span>
+    <span class="tag http">WS :3000</span>
     <span class="tag shared">shared</span>
   </div>
 
   <div class="box node" id="slot-controller" style="min-width:260px;">
-    <div class="box-title">controller/slot_controller.js</div>
+    <div class="box-title">src/controller/slot_controller.js</div>
     <div class="box-sub">
       Shared by both modes.<br><br>
       State machine per slot: EMPTY→REC→PLAYING→STOPPED<br>
@@ -460,7 +462,7 @@
   </div>
 
   <div class="box node" id="osc-transport" style="min-width:200px;">
-    <div class="box-title">controller/osc_transport.js</div>
+    <div class="box-title">src/controller/osc_transport.js</div>
     <div class="box-sub">
       node-osc Client → sends to :9000<br>
       node-osc Server → listens on :9001<br>
@@ -470,9 +472,10 @@
   </div>
 
   <div class="box node" id="tempo" style="min-width:200px;">
-    <div class="box-title">controller/tempo.js</div>
+    <div class="box-title">src/controller/tempo.js</div>
     <div class="box-sub">
       MidiClockTracker — 24 ppqn → BPM<br>
+      onBeat fires every 24 ticks → broadcast<br>
       TapTempoTracker  — manual tap fallback<br>
       TempoSource      — priority: clock > tap<br><br>
       Used for autoLoop beat quantisation
@@ -481,7 +484,7 @@
   </div>
 
   <div class="box node mode-only" data-mode="Linux" id="jack-router" style="min-width:200px;">
-    <div class="box-title">controller/jack_capture_router.js</div>
+    <div class="box-title">src/controller/jack_capture_router.js</div>
     <div class="box-sub">
       Runs jack_connect / jack_disconnect<br>
       Switches live audio source between<br>
@@ -495,7 +498,8 @@
   <div class="box web mode-only" data-mode="Mode B" id="browser" style="min-width:320px;">
     <div class="box-title">Browser — public/dev-controller.html</div>
     <div class="box-sub">
-      Polls GET /api/state every ~500ms for slot status<br><br>
+      WebSocket connection → receives state push on change<br>
+      Reconnects with exponential backoff on disconnect<br><br>
       Buttons emit POST /api/action:<br>
       tap | clear | reset | cropUp/Down | cropStartUp/Down<br>
       moveUp/Down | half | double | autoLoop:1beat/2beat/4beat/2bar<br>
@@ -503,6 +507,7 @@
       Displays: slot state pill, loop length ms, crop offsets, BPM
     </div>
     <span class="tag http">HTTP :3000</span>
+    <span class="tag http">WS :3000</span>
   </div>
 
   <div class="box web" id="config-files" style="min-width:260px;">
@@ -690,13 +695,16 @@ const arrows = [
   { from: 'pd-engine',     to: 'jack',             label: 'pure_data:output_1/2',             color: '#22d3ee', offset: 12 },
   { from: 'jack',          to: 'speakers',         label: 'playback',                         color: '#22d3ee' },
   { from: 'xone',          to: 'mac-audio',        label: 'USB audio',                        color: '#22d3ee', dashed: true },
-  { from: 'mac-audio',     to: 'pd-engine',        label: 'adc~ 9 10 / dac~ 1 2',            color: '#22d3ee', dashed: true },
+  { from: 'mac-audio',     to: 'pd-engine',        label: 'adc~ 9 10',                        color: '#22d3ee', dashed: true },
+  { from: 'pd-engine',     to: 'mac-audio',        label: 'dac~ 1 2',                         color: '#22d3ee', dashed: true, offset: 12 },
+  { from: 'mac-audio',     to: 'speakers',         label: 'playback',                         color: '#22d3ee', dashed: true },
 
   // MIDI
   { from: 'x1mk3',         to: 'indexjs',          label: 'MIDI notes/CC',                    color: '#f59e0b' },
   { from: 'xone',          to: 'indexjs',          label: 'MIDI clock',                       color: '#f59e0b', dashed: true },
-  { from: 'xone',          to: 'devjs',            label: 'MIDI clock',                       color: '#f59e0b', dashed: true },
+  { from: 'x1mk3',         to: 'devjs',            label: 'MIDI clock',                       color: '#f59e0b', dashed: true },
   { from: 'indexjs',       to: 'x1mk3',            label: 'LED note-on/off',                  color: '#f59e0b', offset: 10 },
+  { from: 'indexjs',       to: 'xone',             label: 'LED note-on/off',                  color: '#f59e0b', dashed: true, offset: 10 },
 
   // OSC
   { from: 'osc-transport', to: 'pd-engine',        label: 'UDP :9000\n/slotX rec|play|crop…', color: '#a78bfa' },
@@ -712,8 +720,8 @@ const arrows = [
   { from: 'devjs',         to: 'tempo',            label: 'tick()',                            color: '#f59e0b', dashed: true },
 
   // HTTP
-  { from: 'browser',       to: 'web-server-js',     label: 'POST /api/action\nGET /api/state', color: '#34d399' },
-  { from: 'web-server-js', to: 'browser',           label: 'HTML + JSON state',                color: '#34d399', offset: 12 },
+  { from: 'browser',       to: 'web-server-js',     label: 'WS connect\nPOST /api/action',     color: '#34d399' },
+  { from: 'web-server-js', to: 'browser',           label: 'HTML + WS push',                   color: '#34d399', offset: 12 },
   { from: 'devjs',         to: 'web-server-js',     label: 'delegates HTTP',                   color: '#34d399', dashed: true },
   { from: 'indexjs',       to: 'web-server-js',     label: 'HTTP (--web)',                     color: '#34d399', dashed: true },
 

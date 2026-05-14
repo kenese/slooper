@@ -138,6 +138,12 @@ const transport = new OscTransport({
         const WEB_HOST = '127.0.0.1';
         const WEB_PORT = Number(process.env.SLOOPER_WEB_PORT || 3000);
         webServer = createWebServer({ controller, tapTempo, runtimeConfig });
+        const existingOnStateChange = controller.onStateChange;
+        controller.onStateChange = (state) => {
+            existingOnStateChange(state);
+            webServer.broadcast(state);
+        };
+        midiClock.onBeat = () => webServer.broadcast(controller.getState());
         webServer.listen(WEB_PORT, WEB_HOST).then((port) => {
             console.log(`Web controller: http://${WEB_HOST}:${port}`);
         });

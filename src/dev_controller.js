@@ -112,6 +112,8 @@ async function openMidiClockInput() {
 openMidiClockInput();
 
 const webServer = createWebServer({ controller, tapTempo, runtimeConfig });
+controller.onStateChange = webServer.broadcast;
+midiClock.onBeat = () => webServer.broadcast(controller.getState());
 webServer.listen(PORT, HOST).then(() => {
     console.log(`OSC web controller: http://${HOST}:${PORT}`);
     console.log(`Sending OSC to ${runtimeConfig.osc.host}:${runtimeConfig.osc.sendPort}`);

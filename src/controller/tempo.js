@@ -12,11 +12,15 @@ class MidiClockTracker {
         this.maxIntervals = options.maxIntervals ?? 96;
         this.tickTimes = [];
         this.lastTickTime = null;
+        this.tickCount = 0;
+        this.onBeat = null;
     }
 
     tick(timeMs = this.now()) {
         this.lastTickTime = timeMs;
+        this.tickCount++;
         this.tickTimes.push(timeMs);
+        if (this.tickCount % 24 === 0 && this.onBeat) this.onBeat();
         if (this.tickTimes.length > this.maxIntervals + 1) {
             this.tickTimes.shift();
         }
@@ -25,6 +29,7 @@ class MidiClockTracker {
     reset() {
         this.tickTimes = [];
         this.lastTickTime = null;
+        this.tickCount = 0;
     }
 
     isActive(timeMs = this.now()) {
@@ -72,8 +77,7 @@ class MidiClockTracker {
         }
 
         const tickMs = beatMs / 24;
-        const tickIndex = this.tickTimes.length - 1;
-        const ticksSinceBeat = tickIndex % 24;
+        const ticksSinceBeat = (this.tickCount - 1) % 24;
         return this.lastTickTime - ticksSinceBeat * tickMs;
     }
 

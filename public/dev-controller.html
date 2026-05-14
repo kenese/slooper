@@ -318,8 +318,9 @@
     let tempoAnimationFrame = null;
     let beatFlashTimeout = null;
     let beatFlashOffTimeout = null;
-    let pollFailureCount = 0;
-    let pollTimer = null;
+    let ws = null;
+    let wsReconnectDelay = 1000;
+    let wsReconnectTimer = null;
 
     async function request(path, options = {}) {
         const response = await fetch(path, {
@@ -334,11 +335,10 @@
 
     async function action(actionName, slot) {
         try {
-            appState = await request('/api/action', {
+            await request('/api/action', {
                 method: 'POST',
                 body: JSON.stringify({ action: actionName, slot }),
             });
-            render();
         } catch (err) {
             document.getElementById('connection').textContent = err.message;
         }
@@ -481,10 +481,11 @@
         const beatMs = Number(tempo.beatMs);
         if (!Number.isFinite(beatMs) || beatMs <= 0) return;
 
-        const progress = Math.max(0, Math.min(1, Number(tempo.beatProgress) || 0));
-        const elapsedBeatMs = progress * beatMs;
-        const beatStartMs = receivedAtMs - elapsedBeatMs;
+        const beatStartMs = Number(tempo.lastBeatTimeMs);
+        if (!Number.isFinite(beatStartMs)) return;
         tempoView = { beatMs, beatStartMs };
+
+        const elapsedBeatMs = (receivedAtMs - beatStartMs) % beatMs;
 
         function scheduleNextFlash(delayMs) {
             beatFlashTimeout = setTimeout(() => {
@@ -541,7 +542,7 @@
             appState.monitorEnabled ? (appState.monitorActive ? 'On' : 'Muted while loop plays') : 'Off';
         document.getElementById('monitor-button').textContent =
             appState.monitorEnabled ? 'Turn Monitor Off' : 'Turn Monitor On';
-        document.getElementById('connection').textContent = 'OSC -> 127.0.0.1:9000';
+        document.getElementById('connection').textContent = ws && ws.readyState === WebSocket.OPEN ? 'Connected' : 'Reconnecting…';
     }
 
     document.addEventListener('mousedown', (event) => {
@@ -552,36 +553,38 @@
 
     document.getElementById('monitor-button').addEventListener('mousedown', () => action('monitor'));
 
-    function pollState() {
-        if (document.hidden) {
-            schedulePoll(1000);
-            return;
+    function connectWebSocket() {
+        if (wsReconnectTimer !== null) {
+            clearTimeout(wsReconnectTimer);
+            wsReconnectTimer = null;
         }
 
-        request('/api/state')
-            .then((state) => {
-                pollFailureCount = 0;
-                appState = state;
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protocol}//${location.host}`);
+
+        ws.onopen = () => {
+            wsReconnectDelay = 1000;
+            document.getElementById('connection').textContent = 'Connected';
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                appState = JSON.parse(event.data);
                 render();
-                schedulePoll(125);
-            })
-            .catch((err) => {
-                pollFailureCount += 1;
-                document.getElementById('connection').textContent = err.message;
-                const delayMs = Math.min(5000, 125 * Math.pow(2, pollFailureCount));
-                schedulePoll(delayMs);
-            });
+            } catch (_) {}
+        };
+
+        ws.onclose = () => {
+            ws = null;
+            document.getElementById('connection').textContent = 'Reconnecting…';
+            wsReconnectTimer = setTimeout(connectWebSocket, wsReconnectDelay);
+            wsReconnectDelay = Math.min(10000, wsReconnectDelay * 2);
+        };
+
+        ws.onerror = () => ws.close();
     }
 
-    function schedulePoll(delayMs = 0) {
-        if (pollTimer !== null) {
-            clearTimeout(pollTimer);
-        }
-
-        pollTimer = setTimeout(pollState, delayMs);
-    }
-
-    schedulePoll();
+    connectWebSocket();
 </script>
 </body>
 </html>

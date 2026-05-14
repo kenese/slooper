@@ -1,6 +1,7 @@
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
+const { WebSocketServer } = require('ws');
 
 const HTML_PATH = path.join(__dirname, '..', '..', 'public', 'dev-controller.html');
 
@@ -75,7 +76,9 @@ function createWebServer({ controller, tapTempo, runtimeConfig }) {
             if (req.method === 'POST' && req.url === '/api/action') {
                 const body = await readJson(req);
                 await handleAction(body.action, Number(body.slot));
-                sendJson(res, 200, controller.getState());
+                const state = controller.getState();
+                broadcast(state);
+                sendJson(res, 200, state);
                 return;
             }
             res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -85,7 +88,24 @@ function createWebServer({ controller, tapTempo, runtimeConfig }) {
         }
     });
 
+    const wss = new WebSocketServer({ server });
+
+    wss.on('connection', (ws) => {
+        ws.send(JSON.stringify(controller.getState()));
+        ws.on('error', () => {});
+    });
+
+    function broadcast(state) {
+        const msg = JSON.stringify(state);
+        for (const client of wss.clients) {
+            if (client.readyState === client.OPEN) {
+                client.send(msg);
+            }
+        }
+    }
+
     return {
+        broadcast,
         listen(port, host) {
             return new Promise((resolve, reject) => {
                 server.once('error', reject);
@@ -95,7 +115,10 @@ function createWebServer({ controller, tapTempo, runtimeConfig }) {
             });
         },
         close() {
-            return new Promise((resolve) => server.close(resolve));
+            return new Promise((resolve) => {
+                for (const client of wss.clients) client.terminate();
+                wss.close(() => server.close(resolve));
+            });
         },
     };
 }

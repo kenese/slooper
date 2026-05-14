@@ -70,9 +70,9 @@ test('dev controller retries transient MIDI clock input open failures', () => {
     assert.match(source, /await sleep\(1000\)/);
 });
 
-test('dev controller backs off polling when the server is unreachable', () => {
-    assert.match(html, /let pollFailureCount = 0/);
-    assert.match(html, /function schedulePoll/);
-    assert.match(html, /Math\.min\(5000, 125 \* Math\.pow\(2, pollFailureCount\)\)/);
+test('dev controller reconnects websocket with exponential backoff', () => {
+    assert.match(html, /let ws = null/);
+    assert.match(html, /function connectWebSocket/);
+    assert.match(html, /Math\.min\(10000, wsReconnectDelay \* 2\)/);
     assert.doesNotMatch(html, /setInterval\(\(\) =>/);
 });
