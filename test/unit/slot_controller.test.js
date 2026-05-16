@@ -176,7 +176,7 @@ test('clearSlot stops playback, clears Pd, resets local slot, and updates monito
     assert.deepEqual(transport.commands, [
         ['/slot1', 'play', 0],
         ['/slot1', 'clear', 1],
-        ['/monitor', 0],
+        ['/monitor', 1],
     ]);
     assert.equal(controller.getSlot(1).state, SlotState.EMPTY);
     assert.equal(controller.getSlot(1).lengthMs, 0);
@@ -305,7 +305,6 @@ test('monitor active follows preference and playing slots', async () => {
     const transport = createFakeTransport();
     const controller = createController({ transport });
 
-    await controller.toggleMonitor();
     assert.equal(controller.getState().monitorEnabled, true);
     assert.equal(controller.getState().monitorActive, true);
 
@@ -313,7 +312,6 @@ test('monitor active follows preference and playing slots', async () => {
     await controller.updateMonitorState();
     assert.equal(controller.getState().monitorActive, false);
     assert.deepEqual(transport.commands, [
-        ['/monitor', 1],
         ['/monitor', 0],
     ]);
 });
@@ -321,9 +319,6 @@ test('monitor active follows preference and playing slots', async () => {
 test('Pd-reported playback state updates local monitor active state without sending OSC', async () => {
     const transport = createFakeTransport();
     const controller = createController({ transport });
-
-    await controller.toggleMonitor();
-    transport.commands.length = 0;
 
     controller.applyPdState(['slot1', 'playing']);
     assert.equal(controller.getState().monitorActive, false);
@@ -479,7 +474,7 @@ test('clearSlot cancels pending auto-record timers', async () => {
     assert.deepEqual(transport.commands, [
         ['/slot1', 'play', 0],
         ['/slot1', 'clear', 1],
-        ['/monitor', 0],
+        ['/monitor', 1],
     ]);
     assert.equal(controller.getSlot(1).state, SlotState.EMPTY);
 });

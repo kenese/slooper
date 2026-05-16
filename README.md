@@ -110,6 +110,18 @@ If you are running this on a Raspberry Pi using Patchbox OS, you will need to in
 4. **Audio Setup**:
    Ensure your audio interface is configured correctly in Patchbox OS (using `patchbox` config tool or JACK). The startup script attempts to launch `pd`, but you may need to manually manage connections if using JACK.
 
+5. **Auto-start on boot** (optional):
+   Add a `cron @reboot` entry to run Slooper automatically when the Pi powers on:
+   ```bash
+   crontab -e
+   ```
+   Add this line (adjust the path if your project is not in `/home/patch/slooper`):
+   ```
+   @reboot sleep 10 && cd /home/patch/slooper && ./start.sh --appliance >> /home/patch/slooper/slooper.log 2>&1
+   ```
+   The `sleep 10` gives JACK and the audio subsystem time to settle after boot. Logs go to `slooper.log`.
+   To stop auto-start, remove the line from `crontab -e`.
+
 ### Running
 
 Start the application using the provided shell script. This will automatically configure audio settings, start Pure Data, and launch the Node.js controller.
@@ -385,3 +397,4 @@ This means the Raspberry Pi does not see your USB MIDI controller.
 ## TODO
 
 - [ ] Visual feedback of loop position in PD
+- [ ] Auto-start: upgrade from `cron @reboot` to a systemd service for restart-on-failure (auto-recovery if Pd or Node crashes mid-session)

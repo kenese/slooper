@@ -23,7 +23,12 @@ class OscTransport {
             }
         });
         this.server.on('error', (err) => {
-            console.warn(`OSC state listener error on ${this.host}:${this.statePort}: ${err.message}`);
+            if (err.code === 'EADDRINUSE' || err.code === 'EACCES') {
+                console.error(`OSC state listener failed to bind ${this.host}:${this.statePort}: ${err.message}`);
+                process.exit(1);
+            } else {
+                console.warn(`OSC state listener error on ${this.host}:${this.statePort}: ${err.message}`);
+            }
         });
     }
 

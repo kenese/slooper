@@ -58,8 +58,8 @@ class SlotController {
         this.clearTimeout = options.clearTimeout || ((timer) => clearTimeout(timer));
         this.tempo = options.tempo || null;
         this.slots = (options.slots || [1, 2]).map(createSlot);
-        this.monitorEnabled = false;
-        this.monitorActive = false;
+        this.monitorEnabled = true;
+        this.monitorActive = true;
         this.inputSources = options.inputSources || [];
         this.selectedInputSourceId = this.inputSources[0] ? this.inputSources[0].id : null;
         this.inputRouter = options.inputRouter || null;
@@ -380,17 +380,25 @@ class SlotController {
         };
         slot.autoStartTimer = this.setTimeout(async () => {
             slot.autoStartTimer = null;
+            const myRecord = slot.pendingAutoRecord;
             slot.recordStartTime = this.now();
             slot.cropOffset = 0;
             slot.startCropOffset = 0;
             slot.lengthMs = 0;
             slot.originalLengthMs = 0;
             await this.send(slotAddress(slot.id), 'rec', 1);
+            if (slot.pendingAutoRecord !== myRecord) {
+                // clearSlot fired while the rec 1 OSC was in flight — undo it.
+                await this.send(slotAddress(slot.id), 'rec', 0);
+                await this.send(slotAddress(slot.id), 'clear', 1);
+                return;
+            }
             slot.state = SlotState.RECORDING;
             this.emitChange();
 
             slot.autoStopTimer = this.setTimeout(async () => {
                 slot.autoStopTimer = null;
+                if (slot.pendingAutoRecord !== myRecord) return;
                 slot.pendingAutoRecord = null;
                 slot.lengthMs = durationMs;
                 slot.originalLengthMs = durationMs;

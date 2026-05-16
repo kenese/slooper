@@ -144,9 +144,14 @@ const transport = new OscTransport({
             webServer.broadcast(state);
         };
         midiClock.onBeat = () => webServer.broadcast(controller.getState());
-        webServer.listen(WEB_PORT, WEB_HOST).then((port) => {
-            console.log(`Web controller: http://${WEB_HOST}:${port}`);
-        });
+        webServer.listen(WEB_PORT, WEB_HOST)
+            .then((port) => {
+                console.log(`Web controller: http://${WEB_HOST}:${port}`);
+            })
+            .catch((err) => {
+                console.error(`Web server failed to start on port ${WEB_PORT}: ${err.message}`);
+                process.exit(1);
+            });
     }
 })();
 
@@ -219,8 +224,9 @@ function setupMidiHandlers(input, output) {
     });
 
     buttonSlots.forEach((slot) => setLED(slot, false));
-    setLED(monitorButton, false);
+    setLED(monitorButton, controller.getState().monitorEnabled);
     sourceButtons.forEach((button) => setLED(button, controller.getState().inputRouting.selectedSourceId === button.sourceId));
+    controller.updateMonitorState().catch((err) => console.error(err.message));
 
     input.on('clock', () => midiClock.tick());
     input.on('start', () => midiClock.reset());
@@ -490,9 +496,11 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 function shutdown() {
-    if (webServer) webServer.close();
-    transport.close();
-    process.exit(0);
+    const close = webServer ? webServer.close() : Promise.resolve();
+    close.finally(() => {
+        transport.close();
+        process.exit(0);
+    });
 }
 
 process.on('SIGINT', shutdown);

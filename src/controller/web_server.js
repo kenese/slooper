@@ -41,6 +41,7 @@ function createWebServer({ controller, tapTempo, runtimeConfig }) {
         }
         if (action === 'tapTempo') {
             tapTempo.tap(Date.now());
+            broadcast(controller.getState());
             return;
         }
         if (action.startsWith('source:')) {
@@ -76,9 +77,7 @@ function createWebServer({ controller, tapTempo, runtimeConfig }) {
             if (req.method === 'POST' && req.url === '/api/action') {
                 const body = await readJson(req);
                 await handleAction(body.action, Number(body.slot));
-                const state = controller.getState();
-                broadcast(state);
-                sendJson(res, 200, state);
+                sendJson(res, 200, controller.getState());
                 return;
             }
             res.writeHead(404, { 'Content-Type': 'text/plain' });
