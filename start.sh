@@ -218,10 +218,10 @@ else
     echo "   Input: $JACK_CAPTURE_LEFT/$JACK_CAPTURE_RIGHT -> pure_data:input_1/2"
     echo "   Output: pure_data:output_1/2 -> $JACK_PLAYBACK_LEFT/$JACK_PLAYBACK_RIGHT"
 
-    jack_connect "$JACK_CAPTURE_LEFT" pure_data:input_1 2>/dev/null || true
-    jack_connect "$JACK_CAPTURE_RIGHT" pure_data:input_2 2>/dev/null || true
-    jack_connect pure_data:output_1 "$JACK_PLAYBACK_LEFT" 2>/dev/null || true
-    jack_connect pure_data:output_2 "$JACK_PLAYBACK_RIGHT" 2>/dev/null || true
+    jack_connect "$JACK_CAPTURE_LEFT" pure_data:input_1 || echo "   Warning: could not connect $JACK_CAPTURE_LEFT to pure_data:input_1 (already connected or port missing?)"
+    jack_connect "$JACK_CAPTURE_RIGHT" pure_data:input_2 || echo "   Warning: could not connect $JACK_CAPTURE_RIGHT to pure_data:input_2"
+    jack_connect pure_data:output_1 "$JACK_PLAYBACK_LEFT" || echo "   Warning: could not connect pure_data:output_1 to $JACK_PLAYBACK_LEFT"
+    jack_connect pure_data:output_2 "$JACK_PLAYBACK_RIGHT" || echo "   Warning: could not connect pure_data:output_2 to $JACK_PLAYBACK_RIGHT"
 fi
 
 sleep 3

@@ -99,7 +99,7 @@ class SlotController {
             inputRouting: {
                 mode: this.inputSources.length > 1 ? 'switching' : 'send',
                 selectedSourceId: this.selectedInputSourceId,
-                sources: this.inputSources,
+                sources: [...this.inputSources],
             },
             tempo: this.getTempoStatus(),
         };

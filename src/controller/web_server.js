@@ -4,6 +4,7 @@ const fs = require('fs');
 const { WebSocketServer } = require('ws');
 
 const HTML_PATH = path.join(__dirname, '..', '..', 'public', 'dev-controller.html');
+const HTML = fs.readFileSync(HTML_PATH, 'utf8');
 
 function readJson(req) {
     return new Promise((resolve, reject) => {
@@ -67,7 +68,7 @@ function createWebServer({ controller, tapTempo, runtimeConfig }) {
         try {
             if (req.method === 'GET' && req.url === '/') {
                 res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-                res.end(fs.readFileSync(HTML_PATH, 'utf8'));
+                res.end(HTML);
                 return;
             }
             if (req.method === 'GET' && req.url === '/api/state') {

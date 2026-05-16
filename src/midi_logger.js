@@ -2,12 +2,11 @@ const easymidi = require('easymidi');
 
 console.log("🎹 Looking for MIDI devices...");
 const inputs = easymidi.getInputs();
-// const hardwareName = inputs.find(n => n.toLowerCase().includes('xone') || n.toLowerCase().includes('px5'));
 const hardwareName = inputs.find(n => n.toLowerCase().includes('traktor') || n.toLowerCase().includes('x1'));
 console.log('inputs', inputs)
 
 if (!hardwareName) {
-    console.error("❌ XONE:PX5 not found. Check USB connection.");
+    console.error("❌ Traktor/X1 device not found. Check USB connection.");
     console.log("Available:", inputs);
     process.exit(1);
 }

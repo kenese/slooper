@@ -63,10 +63,11 @@ function loadJsonFile(filePath) {
 }
 
 function getAliasPath(aliases, name, label) {
-    if (!aliases[name]) {
+    const key = String(name).toUpperCase();
+    if (!aliases[key]) {
         throw new Error(`Unknown ${label} alias: ${name}`);
     }
-    return aliases[name];
+    return aliases[key];
 }
 
 function getAudioConfigPath(projectRoot, options) {
@@ -419,7 +420,7 @@ function getRuntimeConfig(options = {}) {
 }
 
 function replacePdChannels(source, objectName, channels) {
-    const pattern = new RegExp(`${objectName}~(?:\\s+[0-9]+)+`, 'g');
+    const pattern = new RegExp(`(?<=^#X obj \\d+ \\d+ )${objectName}~(?:\\s+[0-9]+)+`, 'gm');
     return source.replace(pattern, `${objectName}~ ${channels.join(' ')}`);
 }
 

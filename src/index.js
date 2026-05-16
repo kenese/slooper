@@ -108,6 +108,8 @@ function openMidiOutput() {
 
 let controller;
 let webServer = null;
+let midiInput = null;
+let midiOutput = null;
 const midiClock = new MidiClockTracker();
 const tapTempo = new TapTempoTracker();
 const tempo = new TempoSource({ clock: midiClock, tap: tapTempo });
@@ -132,6 +134,8 @@ const transport = new OscTransport({
     }
 
     const output = openMidiOutput();
+    midiInput = input;
+    midiOutput = output;
     setupMidiHandlers(input, output);
 
     if (args.includes('--web')) {
@@ -489,15 +493,19 @@ function handleInputSource(button) {
 
 process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
+    process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    process.exit(1);
 });
 
 function shutdown() {
     const close = webServer ? webServer.close() : Promise.resolve();
     close.finally(() => {
+        if (midiInput) midiInput.close();
+        if (midiOutput) midiOutput.close();
         transport.close();
         process.exit(0);
     });
