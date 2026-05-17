@@ -76,6 +76,53 @@ test('single legacy JACK capture pair is exposed as send mode source', () => {
     ]);
 });
 
+test('runtime config derives configurable channel slot topology', () => {
+    const config = getRuntimeConfig({
+        audioDevice: 'MAC',
+        midiDevice: 'WEB',
+        platform: 'darwin',
+        projectRoot: path.join(__dirname, '../..'),
+        channels: 3,
+        slotsPerChannel: 4,
+    });
+
+    assert.deepEqual(config.topology, {
+        channels: 3,
+        slotsPerChannel: 4,
+        totalSlots: 12,
+    });
+    assert.equal(config.slots.length, 12);
+    assert.deepEqual(config.slots[0], { id: 1, name: 'slot1', channelId: 1, indexInChannel: 1 });
+    assert.deepEqual(config.slots[4], { id: 5, name: 'slot5', channelId: 2, indexInChannel: 1 });
+    assert.deepEqual(config.slots[11], { id: 12, name: 'slot12', channelId: 3, indexInChannel: 4 });
+});
+
+test('runtime config rejects unsupported topology values', () => {
+    assert.throws(
+        () => getRuntimeConfig({
+            audioDevice: 'MAC',
+            midiDevice: 'WEB',
+            platform: 'darwin',
+            projectRoot: path.join(__dirname, '../..'),
+            channels: 0,
+            slotsPerChannel: 2,
+        }),
+        /channels must be between 1 and 4/
+    );
+
+    assert.throws(
+        () => getRuntimeConfig({
+            audioDevice: 'MAC',
+            midiDevice: 'WEB',
+            platform: 'darwin',
+            projectRoot: path.join(__dirname, '../..'),
+            channels: 1,
+            slotsPerChannel: 3,
+        }),
+        /slotsPerChannel must be 2 or 4/
+    );
+});
+
 test('loads explicit JSON audio and MIDI config files', () => {
     const config = getRuntimeConfig({
         audioConfigPath: path.join(__dirname, '../../config/audio/xone-px5.json'),

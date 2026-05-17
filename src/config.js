@@ -44,6 +44,45 @@ function normalizePlatform(platform = process.platform) {
     return platform === 'darwin' ? 'darwin' : 'linux';
 }
 
+function normalizePositiveInteger(value, fallback, label) {
+    const normalized = value === undefined ? fallback : Number(value);
+    if (!Number.isInteger(normalized)) {
+        throw new Error(`${label} must be an integer`);
+    }
+    return normalized;
+}
+
+function normalizeTopology(options = {}) {
+    const channels = normalizePositiveInteger(options.channels, 1, 'channels');
+    const slotsPerChannel = normalizePositiveInteger(options.slotsPerChannel, 2, 'slotsPerChannel');
+
+    if (channels < 1 || channels > 4) {
+        throw new Error('channels must be between 1 and 4');
+    }
+
+    if (![2, 4].includes(slotsPerChannel)) {
+        throw new Error('slotsPerChannel must be 2 or 4');
+    }
+
+    return {
+        channels,
+        slotsPerChannel,
+        totalSlots: channels * slotsPerChannel,
+    };
+}
+
+function buildSlots(topology) {
+    return Array.from({ length: topology.totalSlots }, (_, index) => {
+        const id = index + 1;
+        return {
+            id,
+            name: `slot${id}`,
+            channelId: Math.floor(index / topology.slotsPerChannel) + 1,
+            indexInChannel: (index % topology.slotsPerChannel) + 1,
+        };
+    });
+}
+
 function resolveConfigPath(projectRoot, configPath) {
     if (path.isAbsolute(configPath)) {
         return configPath;
@@ -394,10 +433,14 @@ function getRuntimeConfig(options = {}) {
     const runtimePatchPath = path.join(projectRoot, '.runtime', 'engine.pd');
     const pdChannels = platform === 'darwin' ? audio.macPdChannels : audio.linuxPdChannels;
     const generateRuntimePatch = platform === 'darwin';
+    const topology = normalizeTopology(options);
+    const slots = buildSlots(topology);
 
     return {
         projectRoot,
         platform,
+        topology,
+        slots,
         audioDeviceName: options.audioConfigPath ? audio.name : (options.audioDevice || 'XONE'),
         midiDeviceName: options.midiConfigPath ? midi.name : (options.midiDevice || 'XONE'),
         audioConfigPath,
