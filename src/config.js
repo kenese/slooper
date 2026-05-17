@@ -264,7 +264,17 @@ function optionalMidiControl(controls, name, type) {
     return validateMidiControl(control, name, type);
 }
 
+function requireMidiControlValue(control, name, type) {
+    if (!control) {
+        throw new Error(`Missing MIDI control: ${name}`);
+    }
+    return validateMidiControl(control, name, type);
+}
+
 function validateMidiControl(control, name, type) {
+    if (!control || typeof control !== 'object') {
+        throw new Error(`MIDI control ${name} must be type ${type}`);
+    }
     if (control.type !== type) {
         throw new Error(`MIDI control ${name} must be type ${type}`);
     }
@@ -283,6 +293,18 @@ function validateMidiControl(control, name, type) {
     return control;
 }
 
+function validateDynamicAutoLoopControls(slotControls, controlName) {
+    if (slotControls.autoLoops === undefined) {
+        return;
+    }
+    if (!slotControls.autoLoops || typeof slotControls.autoLoops !== 'object' || Array.isArray(slotControls.autoLoops)) {
+        throw new Error(`MIDI control ${controlName}.autoLoops must be an object`);
+    }
+    Object.entries(slotControls.autoLoops).forEach(([durationKey, control]) => {
+        validateMidiControl(control, `${controlName}.autoLoops.${durationKey}`, 'note');
+    });
+}
+
 function validateMidiConfig(raw) {
     if (!raw.name) {
         throw new Error('Missing MIDI config name');
@@ -295,6 +317,29 @@ function validateMidiConfig(raw) {
     }
 
     const controls = raw.controls || {};
+    if (controls.slots) {
+        Object.entries(controls.slots).forEach(([slotName, slotControls]) => {
+            const controlName = `slots.${slotName}`;
+            if (!slotControls || typeof slotControls !== 'object') {
+                throw new Error(`Missing MIDI slot controls for ${slotName}`);
+            }
+            requireMidiControlValue(slotControls.button, `${controlName}.button`, 'note');
+            requireMidiControlValue(slotControls.endEncoder, `${controlName}.endEncoder`, 'cc');
+            optionalMidiControl(slotControls, 'startEncoder', 'cc');
+            optionalMidiControl(slotControls, 'moveEncoder', 'cc');
+            optionalMidiControl(slotControls, 'half', 'note');
+            optionalMidiControl(slotControls, 'double', 'note');
+            validateDynamicAutoLoopControls(slotControls, controlName);
+            requireMidiControlValue(slotControls.reset, `${controlName}.reset`, 'note');
+        });
+        optionalMidiControl(controls, 'tapTempo', 'note');
+        Object.keys(controls)
+            .filter((name) => /^captureSource[0-9]+$/.test(name))
+            .forEach((name) => optionalMidiControl(controls, name, 'note'));
+        requireMidiControl(controls, 'monitorButton', 'note');
+        return;
+    }
+
     requireMidiControl(controls, 'slot1Button', 'note');
     requireMidiControl(controls, 'slot2Button', 'note');
     requireMidiControl(controls, 'slot1EndEncoder', 'cc');
@@ -345,6 +390,46 @@ function normalizeAutoLoopControls(controls, slotPrefix) {
     }, {});
 }
 
+function normalizeDynamicAutoLoopControls(autoLoops = {}) {
+    return Object.entries(autoLoops).reduce((normalized, [durationKey, control]) => {
+        normalized[durationKey] = normalizeNoteControl(control);
+        return normalized;
+    }, {});
+}
+
+function normalizeSlotControl(control = {}) {
+    return {
+        note: control.button && control.button.note,
+        channel: control.button && control.button.channel,
+        encoderCC: control.endEncoder && control.endEncoder.controller,
+        encoderChannel: control.endEncoder && control.endEncoder.channel,
+        encoderMode: control.endEncoder && control.endEncoder.mode,
+        startEncoderCC: control.startEncoder ? control.startEncoder.controller : undefined,
+        startEncoderChannel: control.startEncoder ? control.startEncoder.channel : undefined,
+        startEncoderMode: control.startEncoder ? control.startEncoder.mode : undefined,
+        moveEncoderCC: control.moveEncoder ? control.moveEncoder.controller : undefined,
+        moveEncoderChannel: control.moveEncoder ? control.moveEncoder.channel : undefined,
+        moveEncoderMode: control.moveEncoder ? control.moveEncoder.mode : undefined,
+        autoLoops: normalizeDynamicAutoLoopControls(control.autoLoops),
+        half: normalizeNoteControl(control.half),
+        double: normalizeNoteControl(control.double),
+        reset: normalizeNoteControl(control.reset),
+    };
+}
+
+function normalizeLegacySlotControl(controls, slotName) {
+    return normalizeSlotControl({
+        button: controls[`${slotName}Button`],
+        endEncoder: controls[`${slotName}EndEncoder`],
+        startEncoder: controls[`${slotName}StartEncoder`],
+        moveEncoder: controls[`${slotName}MoveEncoder`],
+        reset: controls[`${slotName}Reset`],
+        half: controls[`${slotName}Half`],
+        double: controls[`${slotName}Double`],
+        autoLoops: normalizeAutoLoopControls(controls, slotName),
+    });
+}
+
 function normalizeCaptureSourceControls(controls) {
     return Object.keys(controls)
         .filter((name) => /^captureSource[0-9]+$/.test(name))
@@ -364,59 +449,29 @@ function normalizeMidiConfig(raw) {
     }
 
     const controls = raw.controls || {};
-    const slot1StartEncoder = controls.slot1StartEncoder || {};
-    const slot2StartEncoder = controls.slot2StartEncoder || {};
-    const slot1MoveEncoder = controls.slot1MoveEncoder || {};
-    const slot2MoveEncoder = controls.slot2MoveEncoder || {};
+    const slots = {};
+    if (controls.slots) {
+        Object.entries(controls.slots).forEach(([slotName, control]) => {
+            slots[slotName] = normalizeSlotControl(control);
+        });
+    } else {
+        slots.slot1 = normalizeLegacySlotControl(controls, 'slot1');
+        slots.slot2 = normalizeLegacySlotControl(controls, 'slot2');
+    }
 
     return {
         name: raw.name,
         midiName: raw.match,
         controls,
-        slot1: {
-            note: controls.slot1Button.note,
-            channel: controls.slot1Button.channel,
-            encoderCC: controls.slot1EndEncoder.controller,
-            encoderChannel: controls.slot1EndEncoder.channel,
-            encoderMode: controls.slot1EndEncoder.mode,
-            startEncoderCC: slot1StartEncoder.controller,
-            startEncoderChannel: slot1StartEncoder.channel,
-            startEncoderMode: slot1StartEncoder.mode,
-            moveEncoderCC: slot1MoveEncoder.controller,
-            moveEncoderChannel: slot1MoveEncoder.channel,
-            moveEncoderMode: slot1MoveEncoder.mode,
-            autoLoops: normalizeAutoLoopControls(controls, 'slot1'),
-            half: normalizeNoteControl(controls.slot1Half),
-            double: normalizeNoteControl(controls.slot1Double),
-        },
-        slot2: {
-            note: controls.slot2Button.note,
-            channel: controls.slot2Button.channel,
-            encoderCC: controls.slot2EndEncoder.controller,
-            encoderChannel: controls.slot2EndEncoder.channel,
-            encoderMode: controls.slot2EndEncoder.mode,
-            startEncoderCC: slot2StartEncoder.controller,
-            startEncoderChannel: slot2StartEncoder.channel,
-            startEncoderMode: slot2StartEncoder.mode,
-            moveEncoderCC: slot2MoveEncoder.controller,
-            moveEncoderChannel: slot2MoveEncoder.channel,
-            moveEncoderMode: slot2MoveEncoder.mode,
-            autoLoops: normalizeAutoLoopControls(controls, 'slot2'),
-            half: normalizeNoteControl(controls.slot2Half),
-            double: normalizeNoteControl(controls.slot2Double),
-        },
+        slots,
+        slot1: slots.slot1,
+        slot2: slots.slot2,
         monitor: {
             note: controls.monitorButton.note,
             channel: controls.monitorButton.channel,
         },
-        encoderPress1: {
-            note: controls.slot1Reset.note,
-            channel: controls.slot1Reset.channel,
-        },
-        encoderPress2: {
-            note: controls.slot2Reset.note,
-            channel: controls.slot2Reset.channel,
-        },
+        encoderPress1: slots.slot1 && slots.slot1.reset,
+        encoderPress2: slots.slot2 && slots.slot2.reset,
         tapTempo: normalizeNoteControl(controls.tapTempo),
         captureSources: normalizeCaptureSourceControls(controls),
     };

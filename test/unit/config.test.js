@@ -186,6 +186,107 @@ test('rejects MIDI configs missing required controls', () => {
     );
 });
 
+test('MIDI configs can define dynamic slot control map', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-slots-'));
+    const file = path.join(dir, 'slots.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Slots',
+        match: 'Slots',
+        controls: {
+            monitorButton: { type: 'note', note: 5, channel: 0 },
+            slots: {
+                slot1: {
+                    button: { type: 'note', note: 1, channel: 0 },
+                    endEncoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+                    reset: { type: 'note', note: 20, channel: 0 },
+                    autoLoops: {
+                        '1beat': { type: 'note', note: 30, channel: 0 },
+                    },
+                },
+                slot4: {
+                    button: { type: 'note', note: 4, channel: 0 },
+                    endEncoder: { type: 'cc', controller: 13, channel: 0, mode: 'relative-64' },
+                    reset: { type: 'note', note: 23, channel: 0 },
+                },
+            },
+        },
+    }));
+
+    const config = getRuntimeConfig({
+        audioDevice: 'MAC',
+        midiConfigPath: file,
+        platform: 'darwin',
+        projectRoot: path.join(__dirname, '../..'),
+        channels: 2,
+        slotsPerChannel: 2,
+    });
+
+    assert.equal(config.midi.slots.slot1.note, 1);
+    assert.equal(config.midi.slots.slot4.encoderCC, 13);
+    assert.deepEqual(config.midi.slots.slot1.autoLoops['1beat'], { note: 30, channel: 0 });
+    assert.equal(config.midi.slot1.note, 1);
+});
+
+test('rejects dynamic MIDI slot configs missing required controls', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-slots-bad-'));
+    const file = path.join(dir, 'bad-slots.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Bad Slots',
+        match: 'Bad Slots',
+        controls: {
+            monitorButton: { type: 'note', note: 5, channel: 0 },
+            slots: {
+                slot1: {
+                    button: { type: 'note', note: 1, channel: 0 },
+                    endEncoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+                },
+            },
+        },
+    }));
+
+    assert.throws(
+        () => getRuntimeConfig({
+            audioDevice: 'MAC',
+            midiConfigPath: file,
+            platform: 'darwin',
+            projectRoot: path.join(__dirname, '../..'),
+        }),
+        /Missing MIDI control: slots\.slot1\.reset/
+    );
+});
+
+test('rejects invalid dynamic MIDI slot auto-loop controls', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-slots-bad-auto-loop-'));
+    const file = path.join(dir, 'bad-auto-loop.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Bad Auto Loop Slots',
+        match: 'Bad Auto Loop Slots',
+        controls: {
+            monitorButton: { type: 'note', note: 5, channel: 0 },
+            slots: {
+                slot1: {
+                    button: { type: 'note', note: 1, channel: 0 },
+                    endEncoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+                    reset: { type: 'note', note: 20, channel: 0 },
+                    autoLoops: {
+                        '1beat': null,
+                    },
+                },
+            },
+        },
+    }));
+
+    assert.throws(
+        () => getRuntimeConfig({
+            audioDevice: 'MAC',
+            midiConfigPath: file,
+            platform: 'darwin',
+            projectRoot: path.join(__dirname, '../..'),
+        }),
+        /MIDI control slots\.slot1\.autoLoops\.1beat must be type note/
+    );
+});
+
 test('rejects JACK audio configs missing routing ports', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-audio-'));
     const file = path.join(dir, 'bad.json');
