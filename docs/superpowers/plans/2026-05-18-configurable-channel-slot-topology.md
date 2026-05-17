@@ -1292,7 +1292,7 @@ git commit -m "feat: support multi-channel jack routing"
 - Test: `test/unit/dev_controller_html.test.js`
 - Test: `test/unit/web_server.test.js`
 
-- [ ] **Step 1: Add failing HTML tests**
+- [x] **Step 1: Add failing HTML tests**
 
 In `test/unit/dev_controller_html.test.js`, add source-level checks for dynamic rendering:
 
@@ -1306,7 +1306,7 @@ test('dev controller renders slots from state instead of fixed slot buttons', ()
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -1316,7 +1316,7 @@ npm run test:unit -- test/unit/dev_controller_html.test.js
 
 Expected: FAIL if the current UI is fixed to two slots.
 
-- [ ] **Step 3: Render slots grouped by channel**
+- [x] **Step 3: Render slots grouped by channel**
 
 In the browser JS template, derive:
 
@@ -1351,7 +1351,7 @@ Make each slot button call the existing action endpoint with the dynamic ID:
 <button data-action="tap" data-slot="${slot.id}">${slot.name || `Slot ${slot.id}`}</button>
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run:
 
@@ -1361,7 +1361,7 @@ npm run test:unit -- test/unit/dev_controller_html.test.js test/unit/web_server.
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/dev_controller.js test/unit/dev_controller_html.test.js test/unit/web_server.test.js

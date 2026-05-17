@@ -57,7 +57,24 @@
             text-align: right;
         }
 
-        .grid {
+        .channels {
+            display: grid;
+            gap: 18px;
+        }
+
+        .channel {
+            display: grid;
+            gap: 10px;
+        }
+
+        .channel-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .slots {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 14px;
@@ -267,7 +284,7 @@
                 text-align: left;
             }
 
-            .grid {
+            .slots {
                 grid-template-columns: 1fr;
             }
 
@@ -299,7 +316,7 @@
         </div>
     </section>
 
-    <section class="grid" id="slots"></section>
+    <section class="channels" id="slots"></section>
 
     <section class="transport">
         <div>
@@ -361,14 +378,25 @@
         return Math.round(Number(value) || 0);
     }
 
+    function groupSlotsByChannel(slots) {
+        return slots.reduce((groups, slot) => {
+            const key = String(slot.channelId || 1);
+            groups[key] = groups[key] || [];
+            groups[key].push(slot);
+            return groups;
+        }, {});
+    }
+
     function renderSlot(slot) {
-        const stateClass = slot.stateLabel.toLowerCase();
+        const stateLabel = slot.stateLabel || stateNames[slot.state] || 'Empty';
+        const stateClass = stateLabel.toLowerCase();
         const startCrop = slot.startCropOffset || 0;
         const endCrop = slot.endCropOffset ?? slot.cropOffset ?? 0;
+        const slotName = slot.name || `Slot ${slot.id}`;
         return `
             <article class="slot">
                 <div class="slot-head">
-                    <h2>Slot ${slot.id}</h2>
+                    <h2>${slotName}</h2>
                     <div class="pill ${stateClass}">${stateNames[slot.state]}</div>
                 </div>
                 <div class="readout">
@@ -395,6 +423,22 @@
                 </div>
             </article>
         `;
+    }
+
+    function renderChannels(state) {
+        const slots = state.slots.map((slot) => slot);
+        const groups = groupSlotsByChannel(slots);
+        return Object.entries(groups).map(([channelId, channelSlots]) => `
+            <section class="channel">
+                <div class="channel-head">
+                    <h2>Channel ${channelId}</h2>
+                    <div class="status">${channelSlots.length} slots</div>
+                </div>
+                <div class="slots">
+                    ${channelSlots.map(renderSlot).join('')}
+                </div>
+            </section>
+        `).join('');
     }
 
     function renderInputRouting(inputRouting) {
@@ -536,7 +580,7 @@
     function render() {
         if (!appState) return;
         document.getElementById('input-routing').innerHTML = renderInputRouting(appState.inputRouting);
-        document.getElementById('slots').innerHTML = appState.slots.map(renderSlot).join('');
+        document.getElementById('slots').innerHTML = renderChannels(appState);
         renderTempo(appState.tempo);
         document.getElementById('monitor-status').textContent =
             appState.monitorEnabled ? (appState.monitorActive ? 'On' : 'Muted while loop plays') : 'Off';

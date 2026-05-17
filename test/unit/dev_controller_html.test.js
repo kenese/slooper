@@ -5,6 +5,13 @@ const path = require('node:path');
 
 const html = fs.readFileSync(path.join(__dirname, '../../public/dev-controller.html'), 'utf8');
 
+test('dev controller renders slots from state grouped by channel', () => {
+    assert.match(html, /state\.slots\.map|appState\.slots\.map/);
+    assert.match(html, /groupSlotsByChannel/);
+    assert.match(html, /slot\.channelId/);
+    assert.doesNotMatch(html, /slot1Button[\s\S]*slot2Button/);
+});
+
 test('dev controller exposes separate start and end crop controls', () => {
     assert.match(html, /Start Crop/);
     assert.match(html, /End Crop/);
