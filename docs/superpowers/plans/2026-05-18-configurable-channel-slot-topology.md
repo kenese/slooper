@@ -53,7 +53,7 @@ monitorActive = monitorEnabled && !slotsInChannel.some(slot => slot.state === Sl
 - Modify: `src/config.js`
 - Test: `test/unit/config.test.js`
 
-- [ ] **Step 1: Write failing topology tests**
+- [x] **Step 1: Write failing topology tests**
 
 Add tests near the existing runtime config tests in `test/unit/config.test.js`:
 
@@ -106,7 +106,7 @@ test('runtime config rejects unsupported topology values', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -116,7 +116,7 @@ npm run test:unit -- test/unit/config.test.js
 
 Expected: FAIL because `config.topology` and `config.slots` do not exist.
 
-- [ ] **Step 3: Implement topology normalization**
+- [x] **Step 3: Implement topology normalization**
 
 Add these helpers in `src/config.js` near the existing normalization helpers:
 
@@ -175,7 +175,7 @@ topology,
 slots,
 ```
 
-- [ ] **Step 4: Run tests and confirm pass**
+- [x] **Step 4: Run tests and confirm pass**
 
 Run:
 
@@ -185,7 +185,7 @@ npm run test:unit -- test/unit/config.test.js
 
 Expected: PASS for the new topology tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/config.js test/unit/config.test.js
