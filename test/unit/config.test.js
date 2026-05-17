@@ -59,6 +59,48 @@ test('audio configs can expose multiple named JACK capture source pairs', () => 
     ]);
 });
 
+test('audio config exposes playback port pairs for multiple channels', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-audio-multi-'));
+    const file = path.join(dir, 'multi.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Multi',
+        mode: 'jack',
+        jack: {
+            cardNameIncludes: 'Multi',
+            capturePortPairs: [
+                { id: 'input1', label: 'Input 1', ports: ['system:capture_1', 'system:capture_2'] },
+                { id: 'input2', label: 'Input 2', ports: ['system:capture_3', 'system:capture_4'] },
+            ],
+            playbackPortPairs: [
+                { id: 'output1', label: 'Output 1', ports: ['system:playback_1', 'system:playback_2'] },
+                { id: 'output2', label: 'Output 2', ports: ['system:playback_3', 'system:playback_4'] },
+            ],
+        },
+        pd: {
+            darwin: { adc: [1, 2], dac: [1, 2] },
+            linux: { adc: [1, 2], dac: [1, 2] },
+        },
+    }));
+
+    const config = getRuntimeConfig({
+        audioConfigPath: file,
+        midiDevice: 'WEB',
+        platform: 'linux',
+        projectRoot: path.join(__dirname, '../..'),
+        channels: 2,
+        slotsPerChannel: 2,
+    });
+
+    assert.deepEqual(config.audio.capturePortPairs.map((pair) => pair.ports), [
+        ['system:capture_1', 'system:capture_2'],
+        ['system:capture_3', 'system:capture_4'],
+    ]);
+    assert.deepEqual(config.audio.playbackPortPairs.map((pair) => pair.ports), [
+        ['system:playback_1', 'system:playback_2'],
+        ['system:playback_3', 'system:playback_4'],
+    ]);
+});
+
 test('single legacy JACK capture pair is exposed as send mode source', () => {
     const config = getRuntimeConfig({
         audioDevice: 'Z1',
@@ -567,4 +609,43 @@ test('shell config quotes paths and exposes controller timing values', () => {
     assert.match(shell, /PD_PATCH_PATH='\/repo with spaces\/.runtime\/engine.pd'/);
     assert.match(shell, /HOLD_THRESHOLD_MS='500'/);
     assert.match(shell, /ENCODER_THROTTLE_MS='50'/);
+});
+
+test('shell config exposes JACK port pair arrays for configured topology', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-shell-audio-multi-'));
+    const file = path.join(dir, 'multi.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Multi Shell',
+        mode: 'jack',
+        jack: {
+            cardNameIncludes: 'Multi',
+            capturePortPairs: [
+                { id: 'input1', ports: ['system:capture_1', 'system:capture_2'] },
+                { id: 'input2', ports: ['system:capture_3', 'system:capture_4'] },
+            ],
+            playbackPortPairs: [
+                { id: 'output1', ports: ['system:playback_1', 'system:playback_2'] },
+                { id: 'output2', ports: ['system:playback_3', 'system:playback_4'] },
+            ],
+        },
+        pd: {
+            darwin: { adc: [1, 2], dac: [1, 2] },
+            linux: { adc: [1, 2], dac: [1, 2] },
+        },
+    }));
+    const config = getRuntimeConfig({
+        audioConfigPath: file,
+        midiDevice: 'WEB',
+        platform: 'linux',
+        projectRoot: '/repo',
+        channels: 2,
+        slotsPerChannel: 2,
+    });
+
+    const shell = renderShellConfig(config);
+
+    assert.match(shell, /JACK_CAPTURE_PORT_PAIRS='system:capture_1,system:capture_2;system:capture_3,system:capture_4'/);
+    assert.match(shell, /JACK_PLAYBACK_PORT_PAIRS='system:playback_1,system:playback_2;system:playback_3,system:playback_4'/);
+    assert.match(shell, /CHANNELS='2'/);
+    assert.match(shell, /SLOTS_PER_CHANNEL='2'/);
 });

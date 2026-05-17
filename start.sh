@@ -223,13 +223,25 @@ else
     done
 
     echo "Connecting JACK audio ports..."
-    echo "   Input: $JACK_CAPTURE_LEFT/$JACK_CAPTURE_RIGHT -> pure_data:input_1/2"
-    echo "   Output: pure_data:output_1/2 -> $JACK_PLAYBACK_LEFT/$JACK_PLAYBACK_RIGHT"
+    IFS=';' read -r -a CAPTURE_PAIRS <<< "$JACK_CAPTURE_PORT_PAIRS"
+    IFS=';' read -r -a PLAYBACK_PAIRS <<< "$JACK_PLAYBACK_PORT_PAIRS"
 
-    jack_connect "$JACK_CAPTURE_LEFT" pure_data:input_1 || echo "   Warning: could not connect $JACK_CAPTURE_LEFT to pure_data:input_1 (already connected or port missing?)"
-    jack_connect "$JACK_CAPTURE_RIGHT" pure_data:input_2 || echo "   Warning: could not connect $JACK_CAPTURE_RIGHT to pure_data:input_2"
-    jack_connect pure_data:output_1 "$JACK_PLAYBACK_LEFT" || echo "   Warning: could not connect pure_data:output_1 to $JACK_PLAYBACK_LEFT"
-    jack_connect pure_data:output_2 "$JACK_PLAYBACK_RIGHT" || echo "   Warning: could not connect pure_data:output_2 to $JACK_PLAYBACK_RIGHT"
+    for ((i = 0; i < CHANNELS; i++)); do
+        IFS=',' read -r CAPTURE_LEFT CAPTURE_RIGHT <<< "${CAPTURE_PAIRS[$i]}"
+        IFS=',' read -r PLAYBACK_LEFT PLAYBACK_RIGHT <<< "${PLAYBACK_PAIRS[$i]}"
+        PD_IN_LEFT="pure_data:input_$((i * 2 + 1))"
+        PD_IN_RIGHT="pure_data:input_$((i * 2 + 2))"
+        PD_OUT_LEFT="pure_data:output_$((i * 2 + 1))"
+        PD_OUT_RIGHT="pure_data:output_$((i * 2 + 2))"
+
+        echo "   Input: $CAPTURE_LEFT/$CAPTURE_RIGHT -> $PD_IN_LEFT/$PD_IN_RIGHT"
+        echo "   Output: $PD_OUT_LEFT/$PD_OUT_RIGHT -> $PLAYBACK_LEFT/$PLAYBACK_RIGHT"
+
+        jack_connect "$CAPTURE_LEFT" "$PD_IN_LEFT" || echo "   Warning: could not connect $CAPTURE_LEFT to $PD_IN_LEFT"
+        jack_connect "$CAPTURE_RIGHT" "$PD_IN_RIGHT" || echo "   Warning: could not connect $CAPTURE_RIGHT to $PD_IN_RIGHT"
+        jack_connect "$PD_OUT_LEFT" "$PLAYBACK_LEFT" || echo "   Warning: could not connect $PD_OUT_LEFT to $PLAYBACK_LEFT"
+        jack_connect "$PD_OUT_RIGHT" "$PLAYBACK_RIGHT" || echo "   Warning: could not connect $PD_OUT_RIGHT to $PLAYBACK_RIGHT"
+    done
 fi
 
 sleep 3

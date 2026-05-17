@@ -165,6 +165,42 @@ function normalizeCaptureSources(jack) {
     }];
 }
 
+function normalizePlaybackOutput(output, index) {
+    if (!output || typeof output !== 'object') {
+        throw new Error(`Invalid JACK playbackPortPairs entry at index ${index}`);
+    }
+    if (!output.id) {
+        throw new Error(`Missing JACK playback output id at index ${index}`);
+    }
+    if (!isPair(output.ports)) {
+        throw new Error(`Missing JACK playback output ports for ${output.id}`);
+    }
+    return {
+        id: output.id,
+        label: output.label || output.id,
+        ports: output.ports,
+    };
+}
+
+function normalizePlaybackOutputs(jack) {
+    if (Array.isArray(jack.playbackPortPairs)) {
+        if (jack.playbackPortPairs.length === 0) {
+            throw new Error('Missing JACK playbackPortPairs');
+        }
+        return jack.playbackPortPairs.map(normalizePlaybackOutput);
+    }
+
+    if (!isPair(jack.playbackPorts)) {
+        throw new Error('Missing JACK playbackPorts');
+    }
+
+    return [{
+        id: 'playback-1',
+        label: 'Playback 1',
+        ports: jack.playbackPorts,
+    }];
+}
+
 function normalizeMacPdSource(source, index) {
     if (!source || typeof source !== 'object') {
         throw new Error(`Invalid Pd darwinSources entry at index ${index}`);
@@ -216,9 +252,7 @@ function validateAudioConfig(raw) {
             throw new Error('Missing JACK config');
         }
         normalizeCaptureSources(raw.jack);
-        if (!isPair(raw.jack.playbackPorts)) {
-            throw new Error('Missing JACK playbackPorts');
-        }
+        normalizePlaybackOutputs(raw.jack);
     }
 }
 
@@ -227,16 +261,21 @@ function normalizeAudioConfig(raw) {
 
     const jack = raw.jack || {};
     const pd = raw.pd || {};
-    const captureSources = raw.mode === 'jack' || !raw.mode ? normalizeCaptureSources(jack) : [];
-    const capturePorts = captureSources[0] ? captureSources[0].ports : [];
+    const usesJack = raw.mode === 'jack' || !raw.mode;
+    const capturePortPairs = usesJack ? normalizeCaptureSources(jack) : [];
+    const playbackPortPairs = usesJack ? normalizePlaybackOutputs(jack) : [];
+    const capturePorts = capturePortPairs[0] ? capturePortPairs[0].ports : [];
+    const playbackPorts = playbackPortPairs[0] ? playbackPortPairs[0].ports : [];
 
     return {
         name: raw.name,
         mode: raw.mode || 'jack',
         jackCardNameIncludes: jack.cardNameIncludes || '',
+        capturePortPairs,
+        playbackPortPairs,
         capturePorts,
-        captureSources,
-        playbackPorts: jack.playbackPorts || [],
+        captureSources: capturePortPairs,
+        playbackPorts,
         macPdChannels: pd.darwin || { adc: [1, 2], dac: [1, 2] },
         macPdSources: normalizeMacPdSources(pd),
         linuxPdChannels: pd.linux || { adc: [1, 2], dac: [1, 2] },
@@ -734,6 +773,10 @@ function renderShellConfig(config) {
         JACK_CAPTURE_RIGHT: config.audio.capturePorts ? config.audio.capturePorts[1] : '',
         JACK_PLAYBACK_LEFT: config.audio.playbackPorts ? config.audio.playbackPorts[0] : '',
         JACK_PLAYBACK_RIGHT: config.audio.playbackPorts ? config.audio.playbackPorts[1] : '',
+        JACK_CAPTURE_PORT_PAIRS: config.audio.capturePortPairs.map((pair) => pair.ports.join(',')).join(';'),
+        JACK_PLAYBACK_PORT_PAIRS: config.audio.playbackPortPairs.map((pair) => pair.ports.join(',')).join(';'),
+        CHANNELS: config.topology.channels,
+        SLOTS_PER_CHANNEL: config.topology.slotsPerChannel,
         JACK_SAMPLE_RATE: config.jack.sampleRate,
         JACK_PERIOD_SIZE: config.jack.periodSize,
         JACK_PERIODS: config.jack.periods,

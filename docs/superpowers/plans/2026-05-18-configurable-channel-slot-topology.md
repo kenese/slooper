@@ -1115,7 +1115,7 @@ git commit -m "feat: drive MIDI handlers from slot topology"
 - Test: `test/unit/config.test.js`
 - Test: `test/unit/start_script.test.js`
 
-- [ ] **Step 1: Add failing audio pair tests**
+- [x] **Step 1: Add failing audio pair tests**
 
 In `test/unit/config.test.js`, add:
 
@@ -1163,7 +1163,7 @@ test('audio config exposes playback port pairs for multiple channels', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -1173,7 +1173,7 @@ npm run test:unit -- test/unit/config.test.js
 
 Expected: FAIL because playback port pairs are not normalized.
 
-- [ ] **Step 3: Add playback pair normalization**
+- [x] **Step 3: Add playback pair normalization**
 
 In `src/config.js`, add:
 
@@ -1231,7 +1231,7 @@ capturePorts: capturePortPairs[0].ports,
 playbackPorts: playbackPortPairs[0].ports,
 ```
 
-- [ ] **Step 4: Render shell config arrays**
+- [x] **Step 4: Render shell config arrays**
 
 In `renderShellConfig`, add:
 
@@ -1242,7 +1242,7 @@ CHANNELS: config.topology.channels,
 SLOTS_PER_CHANNEL: config.topology.slotsPerChannel,
 ```
 
-- [ ] **Step 5: Update `start.sh` JACK connection loop**
+- [x] **Step 5: Update `start.sh` JACK connection loop**
 
 Replace the single connect block with:
 
@@ -1265,7 +1265,7 @@ for ((i = 0; i < CHANNELS; i++)); do
 done
 ```
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run:
 
@@ -1275,7 +1275,7 @@ npm run test:unit -- test/unit/config.test.js test/unit/start_script.test.js
 
 Expected: PASS after updating old source assertions to the looped JACK behavior.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/config.js start.sh config/audio/xone-px5.json test/unit/config.test.js test/unit/start_script.test.js

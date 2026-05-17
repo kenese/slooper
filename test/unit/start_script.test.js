@@ -48,6 +48,17 @@ test('start script forwards topology arguments into runtime config', () => {
     assert.match(source, /"slots-per-channel=\$SLOTS_PER_CHANNEL"/);
 });
 
+test('start script connects configured JACK port pairs for each channel', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../start.sh'), 'utf8');
+
+    assert.match(source, /JACK_CAPTURE_PORT_PAIRS/);
+    assert.match(source, /JACK_PLAYBACK_PORT_PAIRS/);
+    assert.match(source, /for \(\(i = 0; i < CHANNELS; i\+\+\)\); do/);
+    assert.match(source, /PD_IN_LEFT="pure_data:input_\$\(\(i \* 2 \+ 1\)\)"/);
+    assert.match(source, /PD_OUT_RIGHT="pure_data:output_\$\(\(i \* 2 \+ 2\)\)"/);
+    assert.doesNotMatch(source, /jack_connect "\$JACK_CAPTURE_LEFT" pure_data:input_1/);
+});
+
 test('start.sh --print-config applies forwarded topology arguments', () => {
     const output = execFileSync('bash', [
         'start.sh',
