@@ -486,7 +486,7 @@ npm run test:unit -- test/unit/config.test.js test/unit/engine_patch.test.js
 
 Expected: PASS for generated patch tests. Update any old tests that expect Linux to use tracked `src/engine.pd`; Linux should now use `.runtime/engine.pd`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/config.js test/unit/config.test.js test/unit/engine_patch.test.js
@@ -620,7 +620,7 @@ Verified 2026-05-18:
 - `npm run test:engine` passed with 41 passed, 0 failed after restarting Pd against generated `.runtime/engine.pd`.
 - Smoke exposed a `setLength`/`cropStart` regression in `looper_slot.pd`; fixed by giving `setLength` a side-effect-free start-offset memory and covering it in `test/unit/looper_slot_patch.test.js`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/channel_2slot.pd src/channel_4slot.pd test/unit/engine_patch.test.js
@@ -789,7 +789,7 @@ npm run test:unit -- test/unit/slot_controller.test.js
 
 Expected: PASS after updating old monitor expectations from `/monitor` to `/monitor1`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/controller/slot_controller.js test/unit/slot_controller.test.js
@@ -846,7 +846,7 @@ npm run test:unit
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/index.js src/dev_controller.js test/unit/slot_controller.test.js
@@ -997,7 +997,7 @@ npm run test:unit -- test/unit/config.test.js
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/config.js test/unit/config.test.js
@@ -1097,7 +1097,7 @@ npm run test:unit
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/index.js
@@ -1376,7 +1376,7 @@ git commit -m "feat: render web controller from slot topology"
 - Modify: `test/test_engine.js`
 - Modify: `test/run_engine_tests.js`
 
-- [ ] **Step 1: Add multi-slot OSC test**
+- [x] **Step 1: Add multi-slot OSC test**
 
 In `test/test_engine.js`, add:
 
@@ -1401,7 +1401,7 @@ test('topology slots beyond slot2 respond independently', async () => {
 });
 ```
 
-- [ ] **Step 2: Update managed runner topology**
+- [x] **Step 2: Update managed runner topology**
 
 In `test/run_engine_tests.js`, make the managed Pd process start with a 2-channel/2-slot topology:
 
@@ -1417,7 +1417,7 @@ const args = [
 
 If the runner starts Pd directly, update its config call to pass `channels: 2` and `slotsPerChannel: 2`.
 
-- [ ] **Step 3: Run managed engine tests**
+- [x] **Step 3: Run managed engine tests**
 
 Run:
 
@@ -1427,7 +1427,7 @@ npm run test:engine:managed
 
 Expected: PASS. If Pd is not installed in the environment, record that as a local verification blocker and run unit tests instead.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/test_engine.js test/run_engine_tests.js
@@ -1442,7 +1442,7 @@ git commit -m "test: cover generated multi-channel engine topology"
 - Modify: `README.md`
 - Modify: `AGENTS.md` if present as a repo file
 
-- [ ] **Step 1: Update README startup examples**
+- [x] **Step 1: Update README startup examples**
 
 Add:
 
@@ -1462,7 +1462,7 @@ Slots are named globally. With `channels=2 slots-per-channel=4`, channel 1 owns 
 Each channel has one dry monitor path. Any playing slot in a channel mutes that channel's dry monitor only; other channels remain independent.
 ```
 
-- [ ] **Step 2: Update architecture docs**
+- [x] **Step 2: Update architecture docs**
 
 Replace the old two-slot engine description with:
 
@@ -1472,7 +1472,7 @@ It hosts one `[channel_2slot ...]` or `[channel_4slot ...]` abstraction per conf
 `looper_slot.pd` remains the per-slot DSP engine.
 ```
 
-- [ ] **Step 3: Run full unit suite**
+- [x] **Step 3: Run full unit suite**
 
 Run:
 
@@ -1482,7 +1482,7 @@ npm run test:unit
 
 Expected: PASS.
 
-- [ ] **Step 4: Run engine suite**
+- [x] **Step 4: Run engine suite**
 
 Run:
 
@@ -1510,7 +1510,9 @@ Verify:
 - Playing `slot3` mutes only channel 2 dry monitor.
 - `slot1` and `slot3` can play simultaneously.
 
-- [ ] **Step 6: Commit**
+Not run locally on 2026-05-18; requires Pi/XONE hardware.
+
+- [x] **Step 6: Commit**
 
 ```bash
 git add README.md AGENTS.md

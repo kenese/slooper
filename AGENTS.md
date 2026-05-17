@@ -18,7 +18,9 @@
 slooper/
 ├── src/
 │   ├── index.js          # Node.js MIDI/OSC controller (main logic)
-│   ├── engine.pd         # Pure Data top-level patch: OSC/audio routing, slot hosting
+│   ├── engine.pd         # Legacy/generated-baseline Pure Data host patch
+│   ├── channel_2slot.pd  # Pure Data stereo channel abstraction hosting 2 slots
+│   ├── channel_4slot.pd  # Pure Data stereo channel abstraction hosting 4 slots
 │   ├── looper_slot.pd    # Pure Data per-slot audio engine abstraction
 │   └── midi_logger.js    # Utility to discover MIDI CC values
 ├── test/
@@ -29,33 +31,42 @@ slooper/
 
 ### Communication Flow
 ```
-MIDI Controller → Node.js (index.js) → OSC → Pure Data (engine.pd) → Audio Out
+MIDI Controller → Node.js (index.js) → OSC → Pure Data (.runtime/engine.pd) → Audio Out
                                        ↓
                               OSC State Responses
 ```
 
 ### Pure Data Patch Flow
 ```
-engine.pd
+.runtime/engine.pd (generated at startup)
 ├── netreceive -u -b 9000
-│   └── oscparse → list trim → route slot1 slot2 monitor connect
+│   └── oscparse → list trim → route connect source monitor1 monitor2 ...
 ├── adc~
-│   └── input gain → looper_slot slot1 / looper_slot slot2
-├── looper_slot audio outlets
-│   └── stereo sum → dac~
-├── monitor route
-│   └── gated dry input → dac~
-└── looper_slot state outlets
+│   └── stereo pairs → channel_2slot/channel_4slot abstractions
+├── channel audio outlets
+│   └── per-channel stereo pairs → dac~
+├── monitor routes
+│   └── one gated dry input path per channel
+└── channel state outlets
     └── netsend -u -b 127.0.0.1:9001
 ```
 
-`engine.pd` is intentionally a host patch. Keep duplicated per-slot DSP out of it. Per-slot logic belongs in `looper_slot.pd`; adding a slot should require one route outlet, one `[looper_slot slotN]` instance, input/output/state wiring, and the matching Node controller state/mapping.
+`engine.pd` is generated at startup into `.runtime/engine.pd`.
+It hosts one `[channel_2slot ...]` or `[channel_4slot ...]` abstraction per configured stereo channel.
+`looper_slot.pd` remains the per-slot DSP engine.
+
+`channel_2slot.pd` and `channel_4slot.pd` handle channel-local routing:
+- one stereo input pair
+- two or four `[looper_slot slotN]` instances
+- summed stereo loop output for that channel
+- one dry monitor gate for that channel
+- one state outlet forwarding slot `/state` messages
 
 `looper_slot.pd` handles:
 - stereo recording into `$1_data` / `$1_data_R`
 - playback with `phasor~`, `tabread4~`, and sample-rate conversion
 - start/end crop and extend length math
-- 1 second pre-roll plus 1 second tail capture via delayed input recording
+- 1 second pre-roll plus 20 seconds of tail capture via delayed input recording
 - reset to original recorded length
 - clear/reset of playback gates, crop/current/original/playback length state, phasor position, and state output
 - `/state` message formatting for Node/tests
@@ -64,6 +75,13 @@ engine.pd
 - Argument: slot name, e.g. `[looper_slot slot1]`
 - Inlets left-to-right: left audio signal, right audio signal, control messages
 - Outlets left-to-right: left loop signal, right loop signal, formatted `/state` OSC message
+
+Runtime topology:
+- `channels` is a positive integer, currently `1..4`.
+- `slots-per-channel` is `2` or `4`.
+- Slot IDs are flat and global: `slot1`, `slot2`, ..., `slotN`.
+- Channel assignment is deterministic: channel 1 owns the first `slots-per-channel` slots, channel 2 owns the next group, and so on.
+- Channel 1 uses Pd input/output pair `1/2`; channel 2 uses `3/4`; channel 3 uses `5/6`; channel 4 uses `7/8`.
 
 Length state inside `looper_slot.pd` is intentionally split:
 - Original length: set by `[timer]` when recording stops; not changed by crop.
@@ -89,18 +107,20 @@ Pure Data patches use zero-indexed object numbers in the text format. **Connecti
 ### Node.js (index.js)
 - Use ES6+ syntax (const, let, arrow functions)
 - State machine pattern for slot states: `0=EMPTY, 1=RECORDING, 2=PLAYING, 3=STOPPED`
-- MIDI devices configured in `MIDI_CONFIGS` object at top of file
+- MIDI devices are resolved from JSON config files in `config/midi/`
 - Throttled encoder updates (`controller.encoderThrottleMs = 50` in `src/config.js`)
 - Hold detection for clear function (CONFIG.holdThresholdMs = 500)
 - Play-on-release (default): Resuming a paused loop waits for button release (prevents playback during hold-to-delete)
 - Pass `play-on-press` arg to get instant playback on button press instead
+- Dynamic slot controls are read from `runtimeConfig.slots` and `runtimeConfig.midi.slots`
 
 ### Pure Data (`engine.pd` / `looper_slot.pd`)
-- Arrays sized for 20 seconds at 48kHz: `960000` samples
+- Arrays sized for 41 seconds at 48kHz: `1968000` samples
 - Anti-click envelope using trapezoidal windowing
 - Safety: `max(1, $f1)` to prevent division by zero
 - DSP auto-enabled on loadbang
-- `engine.pd` should stay a thin host patch: OSC parsing/routing, shared audio input/output, monitor path, slot summing, and `netsend`
+- `.runtime/engine.pd` should stay a generated thin host patch: OSC parsing/routing, shared audio input/output, per-channel monitor routing, channel abstraction hosting, and `netsend`
+- Per-channel routing belongs in `channel_2slot.pd` / `channel_4slot.pd`
 - Per-slot recording/playback/crop/reset/clear logic lives in `looper_slot.pd`
 - `looper_slot.pd` abstraction contract:
   - Argument: slot name, e.g. `[looper_slot slot1]`
@@ -111,19 +131,20 @@ Pure Data patches use zero-indexed object numbers in the text format. **Connecti
 - Use `[[ "$OSTYPE" == "darwin"* ]]` for Mac detection
 - Linux uses JACK audio, Mac uses native Pd audio
 - Cleanup function traps EXIT signal
+- `channels=` and `slots-per-channel=` are forwarded into runtime config and the generated `.runtime/engine.pd`
 
 ## Hardware Configuration
 
 ### Development Machine (Mac)
 - Pure Data runs with GUI
-- Audio channels: `adc~ 9 10` (XONE main input), `dac~ 1 2` (main output)
+- `.runtime/engine.pd` is generated with enough Pd channel pairs for the configured topology
 - MIDI port opens by name
 
 ### Production (Raspberry Pi + Patchbox OS)
 - Pure Data runs headless: `pd -nogui -jack -nomidi`
 - JACK audio server required (auto-started by script)
 - XONE:PX5 typically on `hw:3` (USB position varies)
-- JACK connections: `system:capture_9/10 → pure_data:input_1/2`
+- JACK connections are made from configured capture/playback port pairs to the matching Pure Data input/output pairs
 - MIDI ports may need to be opened by **index** rather than name (ALSA quirk)
 - May need `libasound2-dev` installed for MIDI
 
@@ -146,19 +167,22 @@ jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 256 -n 2
 jackd -d alsa -d "$JACK_DEVICE" -r 48000 -p 256 -n 3
 ```
 
-## Current State (as of 2026-05-12)
+## Current State (as of 2026-05-18)
 
 ### ✅ Working
-- **Slot 1 and slot 2 audio**: Recording, playback, stop/resume, clear
-- **Slot abstraction**: `looper_slot.pd` implements per-slot audio/state logic, instantiated by `engine.pd` for each slot
+- **Configurable topology**: Startup supports `channels=1..4` and `slots-per-channel=2|4`
+- **Generated engine host**: `.runtime/engine.pd` hosts one channel abstraction per configured stereo channel
+- **Channel abstractions**: `channel_2slot.pd` and `channel_4slot.pd` wrap per-channel slot routing, monitor, output summing, and state forwarding
+- **Slot audio**: Recording, playback, stop/resume, clear
+- **Slot abstraction**: `looper_slot.pd` implements per-slot audio/state logic, instantiated by channel abstractions
 - **End crop/extend**: Encoder adjusts loop end length with debouncing and cumulative Pd length updates
 - **Start crop/extend**: `/slotX cropStart <delta-ms>` adjusts loop start, with 1 second of pre-recorded audio available before the original start
 - **Reset**: Encoder press resets start/end crops to original recording boundaries
 - **Clear**: Pd handles `/slotX clear 1` directly, stops playback, clears length/crop state, and emits zero length/stopped state
 - **Anti-click envelope**: Trapezoidal windowing prevents loop point clicks
-- **Single monitor**: Toggle mutes when any loop is playing
+- **Channel-local monitor**: Toggle mutes dry monitor only for channels with a playing loop
 - **LED sync**: Visual feedback on MIDI controller
-- **Pi deployment**: JACK auto-start, audio device detection, proper port connections
+- **Pi deployment**: JACK auto-start, audio device detection, multi-channel port connections
 - **Clean shutdown**: Ctrl+C stops JACK on Linux for safe USB unplug
 
 ### ❌ Not Working / TODO
@@ -218,7 +242,7 @@ dbus-launch jack_control start
 
 **Pd requires `-nomidi`**: Otherwise Pd grabs the MIDI device first and Node.js gets `ALSA error making port connection`. Full command:
 ```bash
-pd -nogui -jack -nomidi src/engine.pd &
+./start.sh audio-device=XONE midi-device=X1MK3
 ```
 
 ### MIDI on Linux/ALSA
@@ -230,8 +254,8 @@ input = new easymidi.Input(inputIndex);  // Works better than name
 
 ### Monitor Logic
 ```javascript
-// Single monitor that auto-mutes when any loop plays
-const anyPlaying = slots.some(s => s.state === 2);
+// Channel monitor auto-mutes only when a loop in that channel plays
+const anyPlaying = slotsInChannel.some(s => s.state === 2);
 const shouldMonitor = monitorEnabled && !anyPlaying;
 ```
 
@@ -316,10 +340,10 @@ The following items were flagged as contradictions during summarization but have
 - **SKILLS.md is correct**: Lines 102-103 show the right commands for XONE on Pi
 
 ### Pd adc~/dac~ Channel Numbers on Linux ✅
-- **Verified**: tracked `src/engine.pd` stays on logical `adc~ 1 2` and `dac~ 1 2`
-- **Reason**: JACK presents logical port numbers to Pd, not hardware channels. The configured JACK connections (`system:capture_9/10` for XONE) handle the hardware mapping.
-- **Mac uses**: generated `.runtime/engine.pd` when direct device channels such as XONE `adc~ 9 10` are needed
-- **Linux uses**: tracked `src/engine.pd` with logical `adc~ 1 2` and `dac~ 1 2`
+- **Verified**: `.runtime/engine.pd` is generated with logical Pd channel pairs for the configured topology.
+- **Reason**: JACK presents logical port numbers to Pd, not hardware channels. The configured JACK connections map hardware capture/playback pairs onto `pure_data:input_N` and `pure_data:output_N`.
+- **Mac uses**: generated `.runtime/engine.pd` with native Pd channel pairs from the audio config.
+- **Linux uses**: generated `.runtime/engine.pd` with logical pairs `1/2`, `3/4`, etc.; JACK handles hardware mapping.
 
 ### Pure Data Version ✅ (Minor)
 - **Mac currently**: Pd-0.56-2
@@ -328,8 +352,8 @@ The following items were flagged as contradictions during summarization but have
 
 ### Crop Reset Behavior ✅ (Fixed 2026-01-19)
 - **JS behavior**: `handleEncoderPress()` resets `cropOffset` to 0 and sends `/slotX reset 1` to Pd
-- **Pd behavior**: `reset` route now implemented in engine.pd (objects 78-80)
-  - `t b b` sequences the operations (right-to-left: clear addend first, then output original)
-  - `msg 0` → `+` right inlet clears the crop addend
-  - Bang → `f` (object 40) re-outputs the original length
+- **Pd behavior**: `reset` route is implemented inside `looper_slot.pd`
+  - clears start/end crop state
+  - restores current/playback length from the original recording length
+  - emits `/state slotX length <original-ms>`
 - **Result**: Encoder press now truly resets both JS tracking AND Pd audio engine to original loop length
