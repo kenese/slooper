@@ -202,7 +202,7 @@ git commit -m "feat: add runtime topology config"
 - Modify: `start.sh`
 - Test: `test/unit/start_script.test.js`
 
-- [ ] **Step 1: Add argument parsing tests**
+- [x] **Step 1: Add argument parsing tests**
 
 In `test/unit/start_script.test.js`, add assertions against the script source:
 
@@ -236,7 +236,7 @@ test('runtime config accepts numeric topology options from CLI strings', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -246,7 +246,7 @@ npm run test:unit -- test/unit/start_script.test.js test/unit/config.test.js
 
 Expected: FAIL on the `start.sh` source checks.
 
-- [ ] **Step 3: Update Node argument parsing**
+- [x] **Step 3: Update Node argument parsing**
 
 In both `src/index.js` and `src/dev_controller.js`, add:
 
@@ -262,7 +262,7 @@ channels: channelsArg ? channelsArg.split('=')[1] : undefined,
 slotsPerChannel: slotsPerChannelArg ? slotsPerChannelArg.split('=')[1] : undefined,
 ```
 
-- [ ] **Step 4: Update `start.sh` defaults and forwarding**
+- [x] **Step 4: Update `start.sh` defaults and forwarding**
 
 Add defaults near the existing argument defaults:
 
@@ -286,7 +286,7 @@ channels="$CHANNELS" slots-per-channel="$SLOTS_PER_CHANNEL"
 
 If `start.sh` already passes the original `"$@"` into Node, keep that behavior; the explicit shell variables are for Pd/JACK config generation.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run:
 
@@ -296,7 +296,7 @@ npm run test:unit -- test/unit/start_script.test.js test/unit/config.test.js
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/index.js src/dev_controller.js start.sh test/unit/start_script.test.js test/unit/config.test.js
