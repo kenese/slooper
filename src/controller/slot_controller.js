@@ -11,9 +11,11 @@ const SlotState = {
 
 const SlotStateLabel = ['EMPTY', 'RECORDING', 'PLAYING', 'STOPPED', 'PENDING'];
 
-function createSlot(id) {
+function createSlot(slot) {
+    const id = typeof slot === 'object' && slot !== null ? slot.id : slot;
+
     return {
-        id,
+        id: Number(id),
         state: SlotState.EMPTY,
         recordStartTime: 0,
         lengthMs: 0,

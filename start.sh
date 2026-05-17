@@ -15,6 +15,8 @@ STATUS_ONLY=false
 FORCE_CLEANUP=false
 APPLIANCE_MODE=false
 PRINT_CONFIG=false
+CHANNELS=1
+SLOTS_PER_CHANNEL=2
 
 for arg in "$@"; do
     case "$arg" in
@@ -40,12 +42,18 @@ for arg in "$@"; do
         --print-config)
             PRINT_CONFIG=true
             ;;
+        channels=*)
+            CHANNELS="${arg#*=}"
+            ;;
+        slots-per-channel=*)
+            SLOTS_PER_CHANNEL="${arg#*=}"
+            ;;
     esac
 done
 
 mkdir -p "$PID_DIR"
 
-eval "$(node scripts/runtime_config.js --shell "$@")"
+eval "$(node scripts/runtime_config.js --shell "$@" "channels=$CHANNELS" "slots-per-channel=$SLOTS_PER_CHANNEL")"
 
 write_pid() {
     local name="$1"
@@ -128,7 +136,7 @@ show_status() {
 }
 
 if [ "$PRINT_CONFIG" = true ]; then
-    node scripts/runtime_config.js --json "$@"
+    node scripts/runtime_config.js --json "$@" "channels=$CHANNELS" "slots-per-channel=$SLOTS_PER_CHANNEL"
     exit 0
 fi
 
@@ -164,7 +172,7 @@ tracked_cleanup
 
 echo "Configuring audio for: $AUDIO_DEVICE"
 if [ "$PD_GENERATE_RUNTIME_PATCH" = "1" ]; then
-    node scripts/runtime_config.js --ensure-runtime-patch "$@"
+    node scripts/runtime_config.js --ensure-runtime-patch "$@" "channels=$CHANNELS" "slots-per-channel=$SLOTS_PER_CHANNEL"
 fi
 
 echo "Pure Data patch: $PD_PATCH_PATH"

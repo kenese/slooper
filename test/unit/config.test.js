@@ -97,6 +97,21 @@ test('runtime config derives configurable channel slot topology', () => {
     assert.deepEqual(config.slots[11], { id: 12, name: 'slot12', channelId: 3, indexInChannel: 4 });
 });
 
+test('runtime config accepts numeric topology options from CLI strings', () => {
+    const config = getRuntimeConfig({
+        audioDevice: 'MAC',
+        midiDevice: 'WEB',
+        platform: 'darwin',
+        projectRoot: path.join(__dirname, '../..'),
+        channels: '2',
+        slotsPerChannel: '4',
+    });
+
+    assert.equal(config.topology.channels, 2);
+    assert.equal(config.topology.slotsPerChannel, 4);
+    assert.equal(config.topology.totalSlots, 8);
+});
+
 test('runtime config rejects unsupported topology values', () => {
     assert.throws(
         () => getRuntimeConfig({

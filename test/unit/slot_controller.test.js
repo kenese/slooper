@@ -37,6 +37,21 @@ function createManualScheduler() {
     };
 }
 
+test('createController accepts runtime slot descriptors', () => {
+    const transport = createFakeTransport();
+    const controller = createController({
+        transport,
+        slots: [
+            { id: 1, name: 'slot1', channelId: 1, indexInChannel: 1 },
+            { id: 2, name: 'slot2', channelId: 1, indexInChannel: 2 },
+            { id: 3, name: 'slot3', channelId: 2, indexInChannel: 1 },
+            { id: 4, name: 'slot4', channelId: 2, indexInChannel: 2 },
+        ],
+    });
+
+    assert.deepEqual(controller.getState().slots.map((slot) => slot.id), [1, 2, 3, 4]);
+});
+
 test('tapSlot records, stops recording, starts playback, and updates monitor', async () => {
     const transport = createFakeTransport();
     const controller = createController({ transport, now: () => 1000 });

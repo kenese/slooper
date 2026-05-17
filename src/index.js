@@ -12,6 +12,8 @@ const midiArg = args.find((arg) => arg.startsWith('midi-device='));
 const audioArg = args.find((arg) => arg.startsWith('audio-device=') || arg.startsWith('device='));
 const midiConfigArg = args.find((arg) => arg.startsWith('--midi-config='));
 const audioConfigArg = args.find((arg) => arg.startsWith('--audio-config='));
+const channelsArg = args.find((arg) => arg.startsWith('channels='));
+const slotsPerChannelArg = args.find((arg) => arg.startsWith('slots-per-channel='));
 const midiDeviceName = midiArg ? midiArg.split('=')[1] : 'XONE';
 const audioDeviceName = audioArg ? audioArg.split('=')[1] : 'XONE';
 const playOnPress = args.includes('play-on-press');
@@ -21,6 +23,8 @@ const runtimeConfig = getRuntimeConfig({
     midiDevice: midiDeviceName,
     audioConfigPath: audioConfigArg ? audioConfigArg.split('=')[1] : undefined,
     midiConfigPath: midiConfigArg ? midiConfigArg.split('=')[1] : undefined,
+    channels: channelsArg ? channelsArg.split('=')[1] : undefined,
+    slotsPerChannel: slotsPerChannelArg ? slotsPerChannelArg.split('=')[1] : undefined,
 });
 
 runtimeConfig.controller.playOnPress = playOnPress;
@@ -208,6 +212,7 @@ function setupMidiHandlers(input, output) {
     controller = createController({
         transport,
         config: runtimeConfig.controller,
+        slots: runtimeConfig.slots,
         tempo,
         inputSources: runtimeConfig.audio.captureSources,
         inputRouter: runtimeConfig.platform === 'linux' && runtimeConfig.audio.mode === 'jack'
