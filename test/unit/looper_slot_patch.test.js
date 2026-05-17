@@ -121,6 +121,10 @@ test('patch exposes setLength control and emits effective length state', () => {
     const currentEndClip = findObject(objects, /#X obj 673 385 clip 100 41000;/);
     const currentEnd = findObject(objects, /#X obj 736 302 f;/);
     const startOffsetMemory = findObject(objects, /#X obj 920 171 f;/);
+    const setLengthStartOffsetMemory = findObject(objects, /#X obj 1120 171 f;/);
+    const startOffsetUpdate = findObject(objects, /#X obj 920 240 t b f f;/);
+    const recordStartReset = findObject(objects, /#X msg 165 268 0;/);
+    const clearReset = findObject(objects, /#X msg 320 234 0;/);
     const lengthState = findObject(objects, /list prepend \\\$1 length/);
 
     assert.ok(
@@ -128,10 +132,18 @@ test('patch exposes setLength control and emits effective length state', () => {
         'setLength route outlet should feed setLength trigger'
     );
     assert.ok(
-        hasConnection(connections, setLengthTrigger, 1, startOffsetMemory, 0),
-        'setLength should bang the current start offset before applying length'
+        hasConnection(connections, setLengthTrigger, 1, setLengthStartOffsetMemory, 0),
+        'setLength should bang a side-effect-free start offset memory before applying length'
     );
-    assert.ok(hasConnection(connections, startOffsetMemory, 0, setLengthAdd, 1));
+    assert.equal(
+        hasConnection(connections, setLengthTrigger, 1, startOffsetMemory, 0),
+        false,
+        'setLength must not bang the cropStart accumulator memory'
+    );
+    assert.ok(hasConnection(connections, startOffsetUpdate, 2, setLengthStartOffsetMemory, 1));
+    assert.ok(hasConnection(connections, recordStartReset, 0, setLengthStartOffsetMemory, 1));
+    assert.ok(hasConnection(connections, clearReset, 0, setLengthStartOffsetMemory, 1));
+    assert.ok(hasConnection(connections, setLengthStartOffsetMemory, 0, setLengthAdd, 1));
     assert.ok(
         hasConnection(connections, setLengthTrigger, 0, setLengthAdd, 0),
         'requested effective length should feed + left inlet'

@@ -10,7 +10,7 @@ const {
     renderEnginePatch,
 } = require('../../src/config');
 
-test('linux XONE uses tracked engine patch and JACK hardware port mapping', () => {
+test('linux XONE uses generated runtime patch and JACK hardware port mapping', () => {
     const config = getRuntimeConfig({
         audioDevice: 'XONE',
         midiDevice: 'XONE',
@@ -18,8 +18,8 @@ test('linux XONE uses tracked engine patch and JACK hardware port mapping', () =
         projectRoot: '/repo',
     });
 
-    assert.equal(config.pd.patchPath, path.join('/repo', 'src', 'engine.pd'));
-    assert.equal(config.pd.generateRuntimePatch, false);
+    assert.equal(config.pd.patchPath, path.join('/repo', '.runtime', 'engine.pd'));
+    assert.equal(config.pd.generateRuntimePatch, true);
     assert.deepEqual(config.audio.capturePorts, ['system:capture_9', 'system:capture_10']);
     assert.deepEqual(config.audio.playbackPorts, ['system:playback_1', 'system:playback_2']);
     assert.equal(config.audio.jackCardNameIncludes, 'XONE');
@@ -497,82 +497,59 @@ test('runtime_config parses explicit config path arguments', () => {
     });
 });
 
-test('mac XONE renders a runtime patch with direct output channel selection', () => {
-    const source = [
-        '#N canvas 0 0 100 100 12;',
-        '#X obj 14 130 adc~ 1 2;',
-        '#X obj 184 479 dac~ 1 2;',
-    ].join('\n');
-
+test('renderEnginePatch generates default two-slot channel host patch', () => {
     const config = getRuntimeConfig({
-        audioDevice: 'XONE',
-        midiDevice: 'OSC',
+        audioDevice: 'MAC',
+        midiDevice: 'WEB',
         platform: 'darwin',
         projectRoot: '/repo',
     });
 
     assert.equal(config.pd.generateRuntimePatch, true);
     assert.equal(config.pd.patchPath, path.join('/repo', '.runtime', 'engine.pd'));
-    assert.equal(renderEnginePatch(source, config), [
-        '#N canvas 0 0 100 100 12;',
-        '#X declare -path ../src;',
-        '#X obj 14 130 adc~ 3 4 5 6 9 10;',
-        '#X obj 184 479 dac~ 1 2;',
-    ].join('\n'));
+    const rendered = renderEnginePatch('', config);
+
+    assert.match(rendered, /#X declare -path \.\.\/src;/);
+    assert.match(rendered, /adc~ 1 2;/);
+    assert.match(rendered, /dac~ 1 2;/);
+    assert.match(rendered, /route connect source monitor1;/);
+    assert.match(rendered, /channel_2slot slot1 slot2;/);
+    assert.match(rendered, /#X msg \d+ \d+ monitor \\\$1;/);
+    assert.match(rendered, /#X connect 3 2 12 0;/);
+    assert.match(rendered, /#X connect 12 0 11 2;/);
+    assert.match(rendered, /#X connect 3 3 11 2;/);
+    assert.match(rendered, /netsend -u -b;/);
 });
 
-test('mac XONE renders runtime patch with all selectable source input channels', () => {
-    const source = [
-        '#N canvas 0 0 100 100 12;',
-        '#X obj 14 130 adc~ 1 2;',
-        '#X obj 184 479 dac~ 1 2;',
-    ].join('\n');
-
-    const config = getRuntimeConfig({
-        audioDevice: 'XONE',
-        midiDevice: 'OSC',
-        platform: 'darwin',
-        projectRoot: '/repo',
-    });
-
-    assert.deepEqual(config.audio.captureSources.map((item) => item.id), ['main', 'ch2', 'ch3']);
-    assert.equal(renderEnginePatch(source, config).includes('adc~ 3 4 5 6 9 10'), true);
-});
-
-test('mac XONE runtime patch keeps source selector with expanded adc channel mapping', () => {
-    const source = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'engine.pd'), 'utf8');
-    const config = getRuntimeConfig({
-        audioDevice: 'XONE',
-        midiDevice: 'OSC',
-        platform: 'darwin',
-        projectRoot: '/repo',
-    });
-    const rendered = renderEnginePatch(source, config);
-
-    assert.match(rendered, /adc~ 3 4 5 6 9 10/);
-    assert.match(rendered, /route slot1 slot2 monitor connect source/);
-    assert.match(rendered, /route main ch2 ch3/);
-    assert.match(rendered, /#X connect 5 4 41 0;/);
-    assert.match(rendered, /#X connect 5 5 42 0;/);
-    assert.match(rendered, /#X connect 5 0 43 0;/);
-    assert.match(rendered, /#X connect 5 1 44 0;/);
-    assert.match(rendered, /#X connect 5 2 45 0;/);
-    assert.match(rendered, /#X connect 5 3 46 0;/);
-});
-
-test('runtime patch declares source directory so Pd can load abstractions', () => {
-    const source = [
-        '#N canvas 0 0 100 100 12;',
-        '#X obj 14 283 looper_slot slot1;',
-    ].join('\n');
+test('renderEnginePatch generates multi-channel four-slot host patch', () => {
     const config = getRuntimeConfig({
         audioDevice: 'MAC',
-        midiDevice: 'OSC',
+        midiDevice: 'WEB',
         platform: 'darwin',
         projectRoot: '/repo',
+        channels: 3,
+        slotsPerChannel: 4,
     });
+    const rendered = renderEnginePatch('', config);
 
-    assert.match(renderEnginePatch(source, config), /#X declare -path \.\.\/src;/);
+    assert.match(rendered, /adc~ 1 2 3 4 5 6;/);
+    assert.match(rendered, /dac~ 1 2 3 4 5 6;/);
+    assert.match(rendered, /channel_4slot slot1 slot2 slot3 slot4;/);
+    assert.match(rendered, /channel_4slot slot5 slot6 slot7 slot8;/);
+    assert.match(rendered, /channel_4slot slot9 slot10 slot11 slot12;/);
+    assert.match(rendered, /route connect source monitor1 monitor2 monitor3;/);
+    assert.match(rendered, /#X connect 3 5 11 2;/);
+    assert.match(rendered, /#X connect 3 5 12 2;/);
+    assert.match(rendered, /#X connect 3 5 13 2;/);
+    assert.match(rendered, /#X connect 3 2 14 0;/);
+    assert.match(rendered, /#X connect 3 3 15 0;/);
+    assert.match(rendered, /#X connect 3 4 16 0;/);
+    assert.match(rendered, /#X connect 14 0 11 2;/);
+    assert.match(rendered, /#X connect 15 0 12 2;/);
+    assert.match(rendered, /#X connect 16 0 13 2;/);
+    assert.match(rendered, /#X connect 11 2 8 0;/);
+    assert.match(rendered, /#X connect 12 2 8 0;/);
+    assert.match(rendered, /#X connect 13 2 8 0;/);
 });
 
 test('shell config quotes paths and exposes controller timing values', () => {

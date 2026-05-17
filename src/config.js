@@ -487,7 +487,7 @@ function getRuntimeConfig(options = {}) {
     const sourcePatchPath = path.join(projectRoot, 'src', 'engine.pd');
     const runtimePatchPath = path.join(projectRoot, '.runtime', 'engine.pd');
     const pdChannels = platform === 'darwin' ? audio.macPdChannels : audio.linuxPdChannels;
-    const generateRuntimePatch = platform === 'darwin';
+    const generateRuntimePatch = true;
     const topology = normalizeTopology(options);
     const slots = buildSlots(topology);
 
@@ -590,7 +590,95 @@ function rewriteMacSourceSelectorConnections(source, config) {
     return lines.join('\n');
 }
 
+function buildPdChannelList(pairCount) {
+    return Array.from({ length: pairCount * 2 }, (_, index) => index + 1);
+}
+
+function renderGeneratedEnginePatch(config) {
+    const topology = config.topology;
+    const slots = config.slots;
+    const audioChannels = buildPdChannelList(topology.channels);
+    const abstraction = topology.slotsPerChannel === 4 ? 'channel_4slot' : 'channel_2slot';
+    const monitorRoutes = Array.from(
+        { length: topology.channels },
+        (_, index) => `monitor${index + 1}`
+    );
+    const lines = [
+        '#N canvas 171 24 1100 700 10;',
+        '#X declare -path ../src;',
+        '#X obj 13 8 netreceive -u -b 9000;',
+        '#X obj 14 29 oscparse;',
+        '#X obj 14 63 list trim;',
+        `#X obj 201 112 route connect source ${monitorRoutes.join(' ')};`,
+        `#X obj 14 130 adc~ ${audioChannels.join(' ')};`,
+        `#X obj 184 560 dac~ ${audioChannels.join(' ')};`,
+        '#X obj 535 8 loadbang;',
+        '#X msg 535 63 \\; pd dsp 1;',
+        '#X obj 505 398 netsend -u -b;',
+        '#X obj 505 318 loadbang;',
+        '#X msg 505 364 connect 127.0.0.1 9001;',
+    ];
+
+    const netreceive = 0;
+    const oscparse = 1;
+    const listTrim = 2;
+    const route = 3;
+    const adc = 4;
+    const dac = 5;
+    const dspLoadbang = 6;
+    const dspMessage = 7;
+    const netsend = 8;
+    const netsendLoadbang = 9;
+    const connectMessage = 10;
+    const channelStart = 11;
+    const monitorMessageStart = channelStart + topology.channels;
+
+    for (let channelIndex = 0; channelIndex < topology.channels; channelIndex += 1) {
+        const channelSlots = slots
+            .filter((slot) => slot.channelId === channelIndex + 1)
+            .map((slot) => slot.name);
+        lines.push(
+            `#X obj ${14 + channelIndex * 260} 283 ${abstraction} ${channelSlots.join(' ')};`
+        );
+    }
+
+    for (let channelIndex = 0; channelIndex < topology.channels; channelIndex += 1) {
+        lines.push(`#X msg ${14 + channelIndex * 260} 224 monitor \\$1;`);
+    }
+
+    const connections = [
+        `#X connect ${netreceive} 0 ${oscparse} 0;`,
+        `#X connect ${oscparse} 0 ${listTrim} 0;`,
+        `#X connect ${listTrim} 0 ${route} 0;`,
+        `#X connect ${route} 0 ${connectMessage} 0;`,
+        `#X connect ${dspLoadbang} 0 ${dspMessage} 0;`,
+        `#X connect ${netsendLoadbang} 0 ${connectMessage} 0;`,
+        `#X connect ${connectMessage} 0 ${netsend} 0;`,
+    ];
+
+    for (let channelIndex = 0; channelIndex < topology.channels; channelIndex += 1) {
+        const channelObject = channelStart + channelIndex;
+        const monitorMessage = monitorMessageStart + channelIndex;
+        const monitorOutlet = 2 + channelIndex;
+        const unmatchedOutlet = 2 + topology.channels;
+        connections.push(`#X connect ${route} ${unmatchedOutlet} ${channelObject} 2;`);
+        connections.push(`#X connect ${route} ${monitorOutlet} ${monitorMessage} 0;`);
+        connections.push(`#X connect ${monitorMessage} 0 ${channelObject} 2;`);
+        connections.push(`#X connect ${adc} ${channelIndex * 2} ${channelObject} 0;`);
+        connections.push(`#X connect ${adc} ${channelIndex * 2 + 1} ${channelObject} 1;`);
+        connections.push(`#X connect ${channelObject} 0 ${dac} ${channelIndex * 2};`);
+        connections.push(`#X connect ${channelObject} 1 ${dac} ${channelIndex * 2 + 1};`);
+        connections.push(`#X connect ${channelObject} 2 ${netsend} 0;`);
+    }
+
+    return `${lines.join('\n')}\n${connections.join('\n')}\n`;
+}
+
 function renderEnginePatch(source, config) {
+    if (config.topology) {
+        return renderGeneratedEnginePatch(config);
+    }
+
     const adcChannels = config.pd.generateRuntimePatch && config.audio.macPdSources.length > 0
         ? config.audio.macPdSources.flatMap((sourceConfig) => sourceConfig.adc)
         : config.pd.channels.adc;
