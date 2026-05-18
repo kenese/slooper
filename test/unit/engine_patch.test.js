@@ -26,6 +26,15 @@ test('channel_2slot abstraction routes two slots and one monitor path', () => {
     assert.equal((patch.match(/line~/g) || []).length, 1);
 });
 
+test('channel_2slot abstraction exposes monitor and output diagnostics', () => {
+    const patch = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'channel_2slot.pd'), 'utf8');
+
+    assert.match(patch, /print CHANNEL_MONITOR/);
+    assert.equal((patch.match(/env~ 2048/g) || []).length, 2);
+    assert.match(patch, /out_L_db/);
+    assert.match(patch, /out_R_db/);
+});
+
 test('channel_4slot abstraction routes four slots and one monitor path', () => {
     const patchPath = path.join(__dirname, '..', '..', 'src', 'channel_4slot.pd');
     assert.equal(fs.existsSync(patchPath), true);

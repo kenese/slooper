@@ -18,6 +18,11 @@
 #X obj 83 420 outlet~;
 #X obj 144 420 outlet~;
 #X obj 260 420 outlet;
+#X obj 406 86 print CHANNEL_MONITOR;
+#X obj 83 350 env~ 2048;
+#X obj 144 350 env~ 2048;
+#X floatatom 83 380 7 0 0 1 out_L_db - - 0;
+#X floatatom 144 380 7 0 0 1 out_R_db - - 0;
 #X connect 0 0 4 0;
 #X connect 0 0 5 0;
 #X connect 0 0 8 0;
@@ -45,3 +50,8 @@
 #X connect 13 0 11 1;
 #X connect 14 0 16 0;
 #X connect 15 0 17 0;
+#X connect 3 2 19 0;
+#X connect 14 0 20 0;
+#X connect 15 0 21 0;
+#X connect 20 0 22 0;
+#X connect 21 0 23 0;
