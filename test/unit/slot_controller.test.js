@@ -37,6 +37,48 @@ function createManualScheduler() {
     };
 }
 
+test('createController accepts runtime slot descriptors', () => {
+    const transport = createFakeTransport();
+    const controller = createController({
+        transport,
+        slots: [
+            { id: 1, name: 'slot1', channelId: 1, indexInChannel: 1 },
+            { id: 2, name: 'slot2', channelId: 1, indexInChannel: 2 },
+            { id: 3, name: 'slot3', channelId: 2, indexInChannel: 1 },
+            { id: 4, name: 'slot4', channelId: 2, indexInChannel: 2 },
+        ],
+    });
+
+    assert.deepEqual(controller.getState().slots.map((slot) => slot.id), [1, 2, 3, 4]);
+    assert.equal(controller.getState().slots[2].channelId, 2);
+    assert.equal(controller.getState().slots[2].indexInChannel, 1);
+    assert.deepEqual(controller.getState().channels.map((channel) => channel.id), [1, 2]);
+});
+
+test('monitor state is independent per channel', async () => {
+    const transport = createFakeTransport();
+    const controller = createController({
+        transport,
+        slots: [
+            { id: 1, name: 'slot1', channelId: 1, indexInChannel: 1 },
+            { id: 2, name: 'slot2', channelId: 1, indexInChannel: 2 },
+            { id: 3, name: 'slot3', channelId: 2, indexInChannel: 1 },
+            { id: 4, name: 'slot4', channelId: 2, indexInChannel: 2 },
+        ],
+    });
+
+    controller.applyPdState(['slot3', 'length', 1000]);
+    controller.applyPdState(['slot3', 'playing']);
+    await controller.updateMonitorState();
+
+    assert.deepEqual(
+        transport.commands.slice(-2),
+        [['/monitor1', 1], ['/monitor2', 0]]
+    );
+    assert.equal(controller.getState().channels[0].monitorActive, true);
+    assert.equal(controller.getState().channels[1].monitorActive, false);
+});
+
 test('tapSlot records, stops recording, starts playback, and updates monitor', async () => {
     const transport = createFakeTransport();
     const controller = createController({ transport, now: () => 1000 });
@@ -52,7 +94,7 @@ test('tapSlot records, stops recording, starts playback, and updates monitor', a
         ['/slot1', 'rec', 1],
         ['/slot1', 'rec', 0],
         ['/slot1', 'play', 1],
-        ['/monitor', 0],
+        ['/monitor1', 0],
     ]);
     assert.equal(controller.getSlot(1).state, SlotState.PLAYING);
 });
@@ -176,7 +218,7 @@ test('clearSlot stops playback, clears Pd, resets local slot, and updates monito
     assert.deepEqual(transport.commands, [
         ['/slot1', 'play', 0],
         ['/slot1', 'clear', 1],
-        ['/monitor', 1],
+        ['/monitor1', 1],
     ]);
     assert.equal(controller.getSlot(1).state, SlotState.EMPTY);
     assert.equal(controller.getSlot(1).lengthMs, 0);
@@ -312,7 +354,7 @@ test('monitor active follows preference and playing slots', async () => {
     await controller.updateMonitorState();
     assert.equal(controller.getState().monitorActive, false);
     assert.deepEqual(transport.commands, [
-        ['/monitor', 0],
+        ['/monitor1', 0],
     ]);
 });
 
@@ -364,7 +406,7 @@ test('autoLoopSlot schedules empty slot recording on nearest MIDI beat', async (
         ['/slot1', 'rec', 1],
         ['/slot1', 'rec', 0],
         ['/slot1', 'play', 1],
-        ['/monitor', 0],
+        ['/monitor1', 0],
     ]);
     assert.equal(controller.getSlot(1).state, SlotState.PLAYING);
 });
@@ -474,7 +516,7 @@ test('clearSlot cancels pending auto-record timers', async () => {
     assert.deepEqual(transport.commands, [
         ['/slot1', 'play', 0],
         ['/slot1', 'clear', 1],
-        ['/monitor', 1],
+        ['/monitor1', 1],
     ]);
     assert.equal(controller.getSlot(1).state, SlotState.EMPTY);
 });

@@ -3,6 +3,7 @@ const easymidi = require('easymidi');
 const { getRuntimeConfig } = require('./config');
 const { createController, SlotState } = require('./controller/slot_controller');
 const { JackCaptureRouter } = require('./controller/jack_capture_router');
+const { buildMidiSlotMappings, findEncoderTarget } = require('./controller/midi_mapping');
 const { OscTransport } = require('./controller/osc_transport');
 const { MidiClockTracker, TapTempoTracker, TempoSource } = require('./controller/tempo');
 const { createWebServer } = require('./controller/web_server');
@@ -12,6 +13,8 @@ const midiArg = args.find((arg) => arg.startsWith('midi-device='));
 const audioArg = args.find((arg) => arg.startsWith('audio-device=') || arg.startsWith('device='));
 const midiConfigArg = args.find((arg) => arg.startsWith('--midi-config='));
 const audioConfigArg = args.find((arg) => arg.startsWith('--audio-config='));
+const channelsArg = args.find((arg) => arg.startsWith('channels='));
+const slotsPerChannelArg = args.find((arg) => arg.startsWith('slots-per-channel='));
 const midiDeviceName = midiArg ? midiArg.split('=')[1] : 'XONE';
 const audioDeviceName = audioArg ? audioArg.split('=')[1] : 'XONE';
 const playOnPress = args.includes('play-on-press');
@@ -21,6 +24,8 @@ const runtimeConfig = getRuntimeConfig({
     midiDevice: midiDeviceName,
     audioConfigPath: audioConfigArg ? audioConfigArg.split('=')[1] : undefined,
     midiConfigPath: midiConfigArg ? midiConfigArg.split('=')[1] : undefined,
+    channels: channelsArg ? channelsArg.split('=')[1] : undefined,
+    slotsPerChannel: slotsPerChannelArg ? slotsPerChannelArg.split('=')[1] : undefined,
 });
 
 runtimeConfig.controller.playOnPress = playOnPress;
@@ -160,20 +165,13 @@ const transport = new OscTransport({
 })();
 
 function setupMidiHandlers(input, output) {
-    const buttonSlots = [
-        { id: 1, note: midi.slot1.note, channel: midi.slot1.channel, holdTimer: null, actionFired: false },
-        { id: 2, note: midi.slot2.note, channel: midi.slot2.channel, holdTimer: null, actionFired: false },
-    ];
-    const autoLoopButtons = [
-        ...createAutoLoopButtons(1, midi.slot1.autoLoops),
-        ...createAutoLoopButtons(2, midi.slot2.autoLoops),
-    ];
-    const transformButtons = [
-        createTransformButton(1, midi.slot1.half, 0.5, 'Half'),
-        createTransformButton(1, midi.slot1.double, 2, 'Double'),
-        createTransformButton(2, midi.slot2.half, 0.5, 'Half'),
-        createTransformButton(2, midi.slot2.double, 2, 'Double'),
-    ].filter(Boolean);
+    const {
+        buttonSlots,
+        autoLoopButtons,
+        transformButtons,
+        encoderPressButtons,
+        encoderControls,
+    } = buildMidiSlotMappings(runtimeConfig);
     const monitorButton = { note: midi.monitor.note, channel: midi.monitor.channel };
     const sourceButtons = (midi.captureSources || [])
         .map((control, index) => {
@@ -208,6 +206,7 @@ function setupMidiHandlers(input, output) {
     controller = createController({
         transport,
         config: runtimeConfig.controller,
+        slots: runtimeConfig.slots,
         tempo,
         inputSources: runtimeConfig.audio.captureSources,
         inputRouter: runtimeConfig.platform === 'linux' && runtimeConfig.audio.mode === 'jack'
@@ -267,12 +266,11 @@ function setupMidiHandlers(input, output) {
                 return;
             }
 
-            if (msg.note === midi.encoderPress1.note && msg.channel === midi.encoderPress1.channel) {
-                handleEncoderPress(1);
-                return;
-            }
-            if (msg.note === midi.encoderPress2.note && msg.channel === midi.encoderPress2.channel) {
-                handleEncoderPress(2);
+            const encoderPress = encoderPressButtons.find((button) => (
+                msg.note === button.note && msg.channel === button.channel
+            ));
+            if (encoderPress) {
+                handleEncoderPress(encoderPress.id);
                 return;
             }
         }
@@ -305,45 +303,9 @@ function setupMidiHandlers(input, output) {
     });
 
     input.on('cc', (msg) => {
-        let slotId = null;
-        let target = 'end';
-        if (msg.controller === midi.slot1.encoderCC && msg.channel === (midi.slot1.encoderChannel ?? midi.slot1.channel)) slotId = 1;
-        else if (msg.controller === midi.slot2.encoderCC && msg.channel === (midi.slot2.encoderChannel ?? midi.slot2.channel)) slotId = 2;
-        else if (midi.slot1.startEncoderCC !== undefined && msg.controller === midi.slot1.startEncoderCC && msg.channel === (midi.slot1.startEncoderChannel ?? midi.slot1.channel)) {
-            slotId = 1;
-            target = 'start';
-        } else if (midi.slot2.startEncoderCC !== undefined && msg.controller === midi.slot2.startEncoderCC && msg.channel === (midi.slot2.startEncoderChannel ?? midi.slot2.channel)) {
-            slotId = 2;
-            target = 'start';
-        } else if (midi.slot1.moveEncoderCC !== undefined && msg.controller === midi.slot1.moveEncoderCC && msg.channel === (midi.slot1.moveEncoderChannel ?? midi.slot1.channel)) {
-            slotId = 1;
-            target = 'move';
-        } else if (midi.slot2.moveEncoderCC !== undefined && msg.controller === midi.slot2.moveEncoderCC && msg.channel === (midi.slot2.moveEncoderChannel ?? midi.slot2.channel)) {
-            slotId = 2;
-            target = 'move';
-        }
-        if (slotId) handleEncoder(slotId, msg.value, target);
+        const encoderTarget = findEncoderTarget(encoderControls, msg);
+        if (encoderTarget) handleEncoder(encoderTarget.slotId, msg.value, encoderTarget.target);
     });
-
-    function createAutoLoopButtons(slotId, autoLoops = {}) {
-        return Object.entries(autoLoops).map(([durationKey, control]) => ({
-            id: slotId,
-            durationKey,
-            note: control.note,
-            channel: control.channel,
-        }));
-    }
-
-    function createTransformButton(slotId, control, factor, label) {
-        if (!control) return null;
-        return {
-            id: slotId,
-            note: control.note,
-            channel: control.channel,
-            factor,
-            label,
-        };
-    }
 
     function handleRelease(slot) {
         if (slot.holdTimer) {
@@ -455,20 +417,17 @@ function setupMidiHandlers(input, output) {
 
     console.log('');
     console.log('Controls (Runtime MIDI Values):');
-    console.log(`  TAP           : [S1: Ch${midi.slot1.channel} N${midi.slot1.note}] [S2: Ch${midi.slot2.channel} N${midi.slot2.note}] -> Record/Play/Stop`);
-    console.log(`  HOLD (${runtimeConfig.controller.holdThresholdMs}ms): [S1: Ch${midi.slot1.channel} N${midi.slot1.note}] [S2: Ch${midi.slot2.channel} N${midi.slot2.note}] -> Clear Slot`);
-    console.log(`  END ENCODER   : [S1: Ch${midi.slot1.encoderChannel ?? midi.slot1.channel} CC${midi.slot1.encoderCC}] [S2: Ch${midi.slot2.encoderChannel ?? midi.slot2.channel} CC${midi.slot2.encoderCC}] -> Adjust Loop End`);
-    if (midi.slot1.startEncoderCC !== undefined || midi.slot2.startEncoderCC !== undefined) {
-        const s1 = midi.slot1.startEncoderCC !== undefined ? `Ch${midi.slot1.startEncoderChannel ?? midi.slot1.channel} CC${midi.slot1.startEncoderCC}` : 'not mapped';
-        const s2 = midi.slot2.startEncoderCC !== undefined ? `Ch${midi.slot2.startEncoderChannel ?? midi.slot2.channel} CC${midi.slot2.startEncoderCC}` : 'not mapped';
-        console.log(`  START ENCODER : [S1: ${s1}] [S2: ${s2}] -> Adjust Loop Start`);
+    if (buttonSlots.length > 0) {
+        const buttonSummary = buttonSlots.map((slot) => `[S${slot.id}: ${formatNoteControl(slot)}]`).join(' ');
+        console.log(`  TAP           : ${buttonSummary} -> Record/Play/Stop`);
+        console.log(`  HOLD (${runtimeConfig.controller.holdThresholdMs}ms): ${buttonSummary} -> Clear Slot`);
     }
-    if (midi.slot1.moveEncoderCC !== undefined || midi.slot2.moveEncoderCC !== undefined) {
-        const s1 = midi.slot1.moveEncoderCC !== undefined ? `Ch${midi.slot1.moveEncoderChannel ?? midi.slot1.channel} CC${midi.slot1.moveEncoderCC}` : 'not mapped';
-        const s2 = midi.slot2.moveEncoderCC !== undefined ? `Ch${midi.slot2.moveEncoderChannel ?? midi.slot2.channel} CC${midi.slot2.moveEncoderCC}` : 'not mapped';
-        console.log(`  MOVE ENCODER  : [S1: ${s1}] [S2: ${s2}] -> Shift Loop Window`);
+    logEncoderControls('END ENCODER', 'end', 'Adjust Loop End');
+    logEncoderControls('START ENCODER', 'start', 'Adjust Loop Start');
+    logEncoderControls('MOVE ENCODER', 'move', 'Shift Loop Window');
+    if (encoderPressButtons.length > 0) {
+        console.log(`  ENCODER PRESS : ${encoderPressButtons.map((button) => `[S${button.id}: ${formatNoteControl(button)}]`).join(' ')} -> Reset Length`);
     }
-    console.log(`  ENCODER PRESS : [S1: Ch${midi.encoderPress1.channel} N${midi.encoderPress1.note}] [S2: Ch${midi.encoderPress2.channel} N${midi.encoderPress2.note}] -> Reset Length`);
     if (autoLoopButtons.length > 0) {
         console.log(`  AUTO LOOP     : ${autoLoopButtons.map((button) => `[S${button.id} ${button.durationKey}: ${formatNoteControl(button)}]`).join(' ')}`);
     }
@@ -483,6 +442,12 @@ function setupMidiHandlers(input, output) {
     }
     console.log(`  MONITOR       : Ch${midi.monitor.channel} N${midi.monitor.note} -> Toggle (mutes when loop plays)`);
     console.log('');
+
+    function logEncoderControls(label, target, description) {
+        const controls = encoderControls.filter((control) => control.target === target);
+        if (controls.length === 0) return;
+        console.log(`  ${label.padEnd(13)} : ${controls.map((control) => `[S${control.slotId}: Ch${control.channel} CC${control.controller}]`).join(' ')} -> ${description}`);
+    }
 }
 
 function handleInputSource(button) {

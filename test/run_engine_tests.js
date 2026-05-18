@@ -1,9 +1,24 @@
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+const {
+    getRuntimeConfig,
+    ensureRuntimePatch,
+} = require('../src/config');
 
 const projectRoot = path.resolve(__dirname, '..');
+const config = getRuntimeConfig({
+    audioDevice: 'MAC',
+    midiDevice: 'WEB',
+    platform: process.platform,
+    projectRoot,
+    channels: 2,
+    slotsPerChannel: 2,
+});
+const patchPath = ensureRuntimePatch(config);
 const pdCommand = process.env.SLOOPER_PD_CMD || 'pd';
-const pdArgs = (process.env.SLOOPER_PD_ARGS || '-nogui -nomidi src/engine.pd').split(/\s+/).filter(Boolean);
+const pdArgs = process.env.SLOOPER_PD_ARGS
+    ? process.env.SLOOPER_PD_ARGS.split(/\s+/).filter(Boolean)
+    : ['-nogui', '-nomidi', patchPath];
 
 let pd;
 

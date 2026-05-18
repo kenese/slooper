@@ -1,9 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
 const startScript = fs.readFileSync(path.join(__dirname, '..', '..', 'start.sh'), 'utf8');
+const projectRoot = path.join(__dirname, '..', '..');
 
 test('start.sh does not mutate tracked Pd source with sed', () => {
     assert.doesNotMatch(startScript, /sed -i/);
@@ -35,4 +37,57 @@ test('start.sh parses numeric ALSA card id from aplay output for JACK', () => {
 
 test('start.sh force cleanup stops Slooper MIDI diagnostics that can hold ALSA ports', () => {
     assert.match(startScript, /pkill -f "node src\/midi_logger\.js" 2>\/dev\/null \|\| true/);
+});
+
+test('start script forwards topology arguments into runtime config', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../start.sh'), 'utf8');
+
+    assert.match(source, /CHANNELS=/);
+    assert.match(source, /SLOTS_PER_CHANNEL=/);
+    assert.match(source, /"channels=\$CHANNELS"/);
+    assert.match(source, /"slots-per-channel=\$SLOTS_PER_CHANNEL"/);
+});
+
+test('start script connects configured JACK port pairs for each channel', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../start.sh'), 'utf8');
+
+    assert.match(source, /JACK_CAPTURE_PORT_PAIRS/);
+    assert.match(source, /JACK_PLAYBACK_PORT_PAIRS/);
+    assert.match(source, /for \(\(i = 0; i < CHANNELS; i\+\+\)\); do/);
+    assert.match(source, /PD_IN_LEFT="pure_data:input_\$\(\(i \* 2 \+ 1\)\)"/);
+    assert.match(source, /PD_OUT_RIGHT="pure_data:output_\$\(\(i \* 2 \+ 2\)\)"/);
+    assert.doesNotMatch(source, /jack_connect "\$JACK_CAPTURE_LEFT" pure_data:input_1/);
+});
+
+test('start.sh --print-config applies forwarded topology arguments', () => {
+    const output = execFileSync('bash', [
+        'start.sh',
+        '--print-config',
+        'channels=2',
+        'slots-per-channel=4',
+    ], {
+        cwd: projectRoot,
+        encoding: 'utf8',
+    });
+    const config = JSON.parse(output);
+
+    assert.equal(config.topology.channels, 2);
+    assert.equal(config.topology.slotsPerChannel, 4);
+    assert.equal(config.topology.totalSlots, 8);
+});
+
+test('start.sh --print-config rejects topology values with embedded spaces', () => {
+    assert.throws(
+        () => execFileSync('bash', [
+            'start.sh',
+            '--print-config',
+            'channels=2 3',
+            'slots-per-channel=4',
+        ], {
+            cwd: projectRoot,
+            encoding: 'utf8',
+            stdio: 'pipe',
+        }),
+        /channels must be an integer/
+    );
 });

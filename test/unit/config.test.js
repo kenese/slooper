@@ -10,7 +10,7 @@ const {
     renderEnginePatch,
 } = require('../../src/config');
 
-test('linux XONE uses tracked engine patch and JACK hardware port mapping', () => {
+test('linux XONE uses generated runtime patch and JACK hardware port mapping', () => {
     const config = getRuntimeConfig({
         audioDevice: 'XONE',
         midiDevice: 'XONE',
@@ -18,8 +18,8 @@ test('linux XONE uses tracked engine patch and JACK hardware port mapping', () =
         projectRoot: '/repo',
     });
 
-    assert.equal(config.pd.patchPath, path.join('/repo', 'src', 'engine.pd'));
-    assert.equal(config.pd.generateRuntimePatch, false);
+    assert.equal(config.pd.patchPath, path.join('/repo', '.runtime', 'engine.pd'));
+    assert.equal(config.pd.generateRuntimePatch, true);
     assert.deepEqual(config.audio.capturePorts, ['system:capture_9', 'system:capture_10']);
     assert.deepEqual(config.audio.playbackPorts, ['system:playback_1', 'system:playback_2']);
     assert.equal(config.audio.jackCardNameIncludes, 'XONE');
@@ -59,6 +59,48 @@ test('audio configs can expose multiple named JACK capture source pairs', () => 
     ]);
 });
 
+test('audio config exposes playback port pairs for multiple channels', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-audio-multi-'));
+    const file = path.join(dir, 'multi.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Multi',
+        mode: 'jack',
+        jack: {
+            cardNameIncludes: 'Multi',
+            capturePortPairs: [
+                { id: 'input1', label: 'Input 1', ports: ['system:capture_1', 'system:capture_2'] },
+                { id: 'input2', label: 'Input 2', ports: ['system:capture_3', 'system:capture_4'] },
+            ],
+            playbackPortPairs: [
+                { id: 'output1', label: 'Output 1', ports: ['system:playback_1', 'system:playback_2'] },
+                { id: 'output2', label: 'Output 2', ports: ['system:playback_3', 'system:playback_4'] },
+            ],
+        },
+        pd: {
+            darwin: { adc: [1, 2], dac: [1, 2] },
+            linux: { adc: [1, 2], dac: [1, 2] },
+        },
+    }));
+
+    const config = getRuntimeConfig({
+        audioConfigPath: file,
+        midiDevice: 'WEB',
+        platform: 'linux',
+        projectRoot: path.join(__dirname, '../..'),
+        channels: 2,
+        slotsPerChannel: 2,
+    });
+
+    assert.deepEqual(config.audio.capturePortPairs.map((pair) => pair.ports), [
+        ['system:capture_1', 'system:capture_2'],
+        ['system:capture_3', 'system:capture_4'],
+    ]);
+    assert.deepEqual(config.audio.playbackPortPairs.map((pair) => pair.ports), [
+        ['system:playback_1', 'system:playback_2'],
+        ['system:playback_3', 'system:playback_4'],
+    ]);
+});
+
 test('single legacy JACK capture pair is exposed as send mode source', () => {
     const config = getRuntimeConfig({
         audioDevice: 'Z1',
@@ -74,6 +116,68 @@ test('single legacy JACK capture pair is exposed as send mode source', () => {
             ports: ['system:capture_1', 'system:capture_2'],
         },
     ]);
+});
+
+test('runtime config derives configurable channel slot topology', () => {
+    const config = getRuntimeConfig({
+        audioDevice: 'MAC',
+        midiDevice: 'WEB',
+        platform: 'darwin',
+        projectRoot: path.join(__dirname, '../..'),
+        channels: 3,
+        slotsPerChannel: 4,
+    });
+
+    assert.deepEqual(config.topology, {
+        channels: 3,
+        slotsPerChannel: 4,
+        totalSlots: 12,
+    });
+    assert.equal(config.slots.length, 12);
+    assert.deepEqual(config.slots[0], { id: 1, name: 'slot1', channelId: 1, indexInChannel: 1 });
+    assert.deepEqual(config.slots[4], { id: 5, name: 'slot5', channelId: 2, indexInChannel: 1 });
+    assert.deepEqual(config.slots[11], { id: 12, name: 'slot12', channelId: 3, indexInChannel: 4 });
+});
+
+test('runtime config accepts numeric topology options from CLI strings', () => {
+    const config = getRuntimeConfig({
+        audioDevice: 'MAC',
+        midiDevice: 'WEB',
+        platform: 'darwin',
+        projectRoot: path.join(__dirname, '../..'),
+        channels: '2',
+        slotsPerChannel: '4',
+    });
+
+    assert.equal(config.topology.channels, 2);
+    assert.equal(config.topology.slotsPerChannel, 4);
+    assert.equal(config.topology.totalSlots, 8);
+});
+
+test('runtime config rejects unsupported topology values', () => {
+    assert.throws(
+        () => getRuntimeConfig({
+            audioDevice: 'MAC',
+            midiDevice: 'WEB',
+            platform: 'darwin',
+            projectRoot: path.join(__dirname, '../..'),
+            channels: 0,
+            slotsPerChannel: 2,
+        }),
+        /channels must be between 1 and 4/
+    );
+
+    assert.throws(
+        () => getRuntimeConfig({
+            audioDevice: 'MAC',
+            midiDevice: 'WEB',
+            platform: 'darwin',
+            projectRoot: path.join(__dirname, '../..'),
+            channels: 1,
+            slotsPerChannel: 3,
+        }),
+        /slotsPerChannel must be 2 or 4/
+    );
 });
 
 test('loads explicit JSON audio and MIDI config files', () => {
@@ -121,6 +225,107 @@ test('rejects MIDI configs missing required controls', () => {
             projectRoot: path.join(__dirname, '../..'),
         }),
         /Missing MIDI control: slot1Button/
+    );
+});
+
+test('MIDI configs can define dynamic slot control map', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-slots-'));
+    const file = path.join(dir, 'slots.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Slots',
+        match: 'Slots',
+        controls: {
+            monitorButton: { type: 'note', note: 5, channel: 0 },
+            slots: {
+                slot1: {
+                    button: { type: 'note', note: 1, channel: 0 },
+                    endEncoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+                    reset: { type: 'note', note: 20, channel: 0 },
+                    autoLoops: {
+                        '1beat': { type: 'note', note: 30, channel: 0 },
+                    },
+                },
+                slot4: {
+                    button: { type: 'note', note: 4, channel: 0 },
+                    endEncoder: { type: 'cc', controller: 13, channel: 0, mode: 'relative-64' },
+                    reset: { type: 'note', note: 23, channel: 0 },
+                },
+            },
+        },
+    }));
+
+    const config = getRuntimeConfig({
+        audioDevice: 'MAC',
+        midiConfigPath: file,
+        platform: 'darwin',
+        projectRoot: path.join(__dirname, '../..'),
+        channels: 2,
+        slotsPerChannel: 2,
+    });
+
+    assert.equal(config.midi.slots.slot1.note, 1);
+    assert.equal(config.midi.slots.slot4.encoderCC, 13);
+    assert.deepEqual(config.midi.slots.slot1.autoLoops['1beat'], { note: 30, channel: 0 });
+    assert.equal(config.midi.slot1.note, 1);
+});
+
+test('rejects dynamic MIDI slot configs missing required controls', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-slots-bad-'));
+    const file = path.join(dir, 'bad-slots.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Bad Slots',
+        match: 'Bad Slots',
+        controls: {
+            monitorButton: { type: 'note', note: 5, channel: 0 },
+            slots: {
+                slot1: {
+                    button: { type: 'note', note: 1, channel: 0 },
+                    endEncoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+                },
+            },
+        },
+    }));
+
+    assert.throws(
+        () => getRuntimeConfig({
+            audioDevice: 'MAC',
+            midiConfigPath: file,
+            platform: 'darwin',
+            projectRoot: path.join(__dirname, '../..'),
+        }),
+        /Missing MIDI control: slots\.slot1\.reset/
+    );
+});
+
+test('rejects invalid dynamic MIDI slot auto-loop controls', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-slots-bad-auto-loop-'));
+    const file = path.join(dir, 'bad-auto-loop.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Bad Auto Loop Slots',
+        match: 'Bad Auto Loop Slots',
+        controls: {
+            monitorButton: { type: 'note', note: 5, channel: 0 },
+            slots: {
+                slot1: {
+                    button: { type: 'note', note: 1, channel: 0 },
+                    endEncoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+                    reset: { type: 'note', note: 20, channel: 0 },
+                    autoLoops: {
+                        '1beat': null,
+                    },
+                },
+            },
+        },
+    }));
+
+    assert.throws(
+        () => getRuntimeConfig({
+            audioDevice: 'MAC',
+            midiConfigPath: file,
+            platform: 'darwin',
+            projectRoot: path.join(__dirname, '../..'),
+        }),
+        /MIDI control slots\.slot1\.autoLoops\.1beat must be type note/
     );
 });
 
@@ -334,82 +539,59 @@ test('runtime_config parses explicit config path arguments', () => {
     });
 });
 
-test('mac XONE renders a runtime patch with direct output channel selection', () => {
-    const source = [
-        '#N canvas 0 0 100 100 12;',
-        '#X obj 14 130 adc~ 1 2;',
-        '#X obj 184 479 dac~ 1 2;',
-    ].join('\n');
-
+test('renderEnginePatch generates default two-slot channel host patch', () => {
     const config = getRuntimeConfig({
-        audioDevice: 'XONE',
-        midiDevice: 'OSC',
+        audioDevice: 'MAC',
+        midiDevice: 'WEB',
         platform: 'darwin',
         projectRoot: '/repo',
     });
 
     assert.equal(config.pd.generateRuntimePatch, true);
     assert.equal(config.pd.patchPath, path.join('/repo', '.runtime', 'engine.pd'));
-    assert.equal(renderEnginePatch(source, config), [
-        '#N canvas 0 0 100 100 12;',
-        '#X declare -path ../src;',
-        '#X obj 14 130 adc~ 3 4 5 6 9 10;',
-        '#X obj 184 479 dac~ 1 2;',
-    ].join('\n'));
+    const rendered = renderEnginePatch('', config);
+
+    assert.match(rendered, /#X declare -path \.\.\/src;/);
+    assert.match(rendered, /adc~ 1 2;/);
+    assert.match(rendered, /dac~ 1 2;/);
+    assert.match(rendered, /route connect source monitor1;/);
+    assert.match(rendered, /channel_2slot slot1 slot2;/);
+    assert.match(rendered, /#X msg \d+ \d+ monitor \\\$1;/);
+    assert.match(rendered, /#X connect 3 2 12 0;/);
+    assert.match(rendered, /#X connect 12 0 11 2;/);
+    assert.match(rendered, /#X connect 3 3 11 2;/);
+    assert.match(rendered, /netsend -u -b;/);
 });
 
-test('mac XONE renders runtime patch with all selectable source input channels', () => {
-    const source = [
-        '#N canvas 0 0 100 100 12;',
-        '#X obj 14 130 adc~ 1 2;',
-        '#X obj 184 479 dac~ 1 2;',
-    ].join('\n');
-
-    const config = getRuntimeConfig({
-        audioDevice: 'XONE',
-        midiDevice: 'OSC',
-        platform: 'darwin',
-        projectRoot: '/repo',
-    });
-
-    assert.deepEqual(config.audio.captureSources.map((item) => item.id), ['main', 'ch2', 'ch3']);
-    assert.equal(renderEnginePatch(source, config).includes('adc~ 3 4 5 6 9 10'), true);
-});
-
-test('mac XONE runtime patch keeps source selector with expanded adc channel mapping', () => {
-    const source = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'engine.pd'), 'utf8');
-    const config = getRuntimeConfig({
-        audioDevice: 'XONE',
-        midiDevice: 'OSC',
-        platform: 'darwin',
-        projectRoot: '/repo',
-    });
-    const rendered = renderEnginePatch(source, config);
-
-    assert.match(rendered, /adc~ 3 4 5 6 9 10/);
-    assert.match(rendered, /route slot1 slot2 monitor connect source/);
-    assert.match(rendered, /route main ch2 ch3/);
-    assert.match(rendered, /#X connect 5 4 41 0;/);
-    assert.match(rendered, /#X connect 5 5 42 0;/);
-    assert.match(rendered, /#X connect 5 0 43 0;/);
-    assert.match(rendered, /#X connect 5 1 44 0;/);
-    assert.match(rendered, /#X connect 5 2 45 0;/);
-    assert.match(rendered, /#X connect 5 3 46 0;/);
-});
-
-test('runtime patch declares source directory so Pd can load abstractions', () => {
-    const source = [
-        '#N canvas 0 0 100 100 12;',
-        '#X obj 14 283 looper_slot slot1;',
-    ].join('\n');
+test('renderEnginePatch generates multi-channel four-slot host patch', () => {
     const config = getRuntimeConfig({
         audioDevice: 'MAC',
-        midiDevice: 'OSC',
+        midiDevice: 'WEB',
         platform: 'darwin',
         projectRoot: '/repo',
+        channels: 3,
+        slotsPerChannel: 4,
     });
+    const rendered = renderEnginePatch('', config);
 
-    assert.match(renderEnginePatch(source, config), /#X declare -path \.\.\/src;/);
+    assert.match(rendered, /adc~ 1 2 3 4 5 6;/);
+    assert.match(rendered, /dac~ 1 2 3 4 5 6;/);
+    assert.match(rendered, /channel_4slot slot1 slot2 slot3 slot4;/);
+    assert.match(rendered, /channel_4slot slot5 slot6 slot7 slot8;/);
+    assert.match(rendered, /channel_4slot slot9 slot10 slot11 slot12;/);
+    assert.match(rendered, /route connect source monitor1 monitor2 monitor3;/);
+    assert.match(rendered, /#X connect 3 5 11 2;/);
+    assert.match(rendered, /#X connect 3 5 12 2;/);
+    assert.match(rendered, /#X connect 3 5 13 2;/);
+    assert.match(rendered, /#X connect 3 2 14 0;/);
+    assert.match(rendered, /#X connect 3 3 15 0;/);
+    assert.match(rendered, /#X connect 3 4 16 0;/);
+    assert.match(rendered, /#X connect 14 0 11 2;/);
+    assert.match(rendered, /#X connect 15 0 12 2;/);
+    assert.match(rendered, /#X connect 16 0 13 2;/);
+    assert.match(rendered, /#X connect 11 2 8 0;/);
+    assert.match(rendered, /#X connect 12 2 8 0;/);
+    assert.match(rendered, /#X connect 13 2 8 0;/);
 });
 
 test('shell config quotes paths and exposes controller timing values', () => {
@@ -427,4 +609,43 @@ test('shell config quotes paths and exposes controller timing values', () => {
     assert.match(shell, /PD_PATCH_PATH='\/repo with spaces\/.runtime\/engine.pd'/);
     assert.match(shell, /HOLD_THRESHOLD_MS='500'/);
     assert.match(shell, /ENCODER_THROTTLE_MS='50'/);
+});
+
+test('shell config exposes JACK port pair arrays for configured topology', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-shell-audio-multi-'));
+    const file = path.join(dir, 'multi.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Multi Shell',
+        mode: 'jack',
+        jack: {
+            cardNameIncludes: 'Multi',
+            capturePortPairs: [
+                { id: 'input1', ports: ['system:capture_1', 'system:capture_2'] },
+                { id: 'input2', ports: ['system:capture_3', 'system:capture_4'] },
+            ],
+            playbackPortPairs: [
+                { id: 'output1', ports: ['system:playback_1', 'system:playback_2'] },
+                { id: 'output2', ports: ['system:playback_3', 'system:playback_4'] },
+            ],
+        },
+        pd: {
+            darwin: { adc: [1, 2], dac: [1, 2] },
+            linux: { adc: [1, 2], dac: [1, 2] },
+        },
+    }));
+    const config = getRuntimeConfig({
+        audioConfigPath: file,
+        midiDevice: 'WEB',
+        platform: 'linux',
+        projectRoot: '/repo',
+        channels: 2,
+        slotsPerChannel: 2,
+    });
+
+    const shell = renderShellConfig(config);
+
+    assert.match(shell, /JACK_CAPTURE_PORT_PAIRS='system:capture_1,system:capture_2;system:capture_3,system:capture_4'/);
+    assert.match(shell, /JACK_PLAYBACK_PORT_PAIRS='system:playback_1,system:playback_2;system:playback_3,system:playback_4'/);
+    assert.match(shell, /CHANNELS='2'/);
+    assert.match(shell, /SLOTS_PER_CHANNEL='2'/);
 });

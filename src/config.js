@@ -44,6 +44,45 @@ function normalizePlatform(platform = process.platform) {
     return platform === 'darwin' ? 'darwin' : 'linux';
 }
 
+function normalizePositiveInteger(value, fallback, label) {
+    const normalized = value === undefined ? fallback : Number(value);
+    if (!Number.isInteger(normalized)) {
+        throw new Error(`${label} must be an integer`);
+    }
+    return normalized;
+}
+
+function normalizeTopology(options = {}) {
+    const channels = normalizePositiveInteger(options.channels, 1, 'channels');
+    const slotsPerChannel = normalizePositiveInteger(options.slotsPerChannel, 2, 'slotsPerChannel');
+
+    if (channels < 1 || channels > 4) {
+        throw new Error('channels must be between 1 and 4');
+    }
+
+    if (![2, 4].includes(slotsPerChannel)) {
+        throw new Error('slotsPerChannel must be 2 or 4');
+    }
+
+    return {
+        channels,
+        slotsPerChannel,
+        totalSlots: channels * slotsPerChannel,
+    };
+}
+
+function buildSlots(topology) {
+    return Array.from({ length: topology.totalSlots }, (_, index) => {
+        const id = index + 1;
+        return {
+            id,
+            name: `slot${id}`,
+            channelId: Math.floor(index / topology.slotsPerChannel) + 1,
+            indexInChannel: (index % topology.slotsPerChannel) + 1,
+        };
+    });
+}
+
 function resolveConfigPath(projectRoot, configPath) {
     if (path.isAbsolute(configPath)) {
         return configPath;
@@ -126,6 +165,42 @@ function normalizeCaptureSources(jack) {
     }];
 }
 
+function normalizePlaybackOutput(output, index) {
+    if (!output || typeof output !== 'object') {
+        throw new Error(`Invalid JACK playbackPortPairs entry at index ${index}`);
+    }
+    if (!output.id) {
+        throw new Error(`Missing JACK playback output id at index ${index}`);
+    }
+    if (!isPair(output.ports)) {
+        throw new Error(`Missing JACK playback output ports for ${output.id}`);
+    }
+    return {
+        id: output.id,
+        label: output.label || output.id,
+        ports: output.ports,
+    };
+}
+
+function normalizePlaybackOutputs(jack) {
+    if (Array.isArray(jack.playbackPortPairs)) {
+        if (jack.playbackPortPairs.length === 0) {
+            throw new Error('Missing JACK playbackPortPairs');
+        }
+        return jack.playbackPortPairs.map(normalizePlaybackOutput);
+    }
+
+    if (!isPair(jack.playbackPorts)) {
+        throw new Error('Missing JACK playbackPorts');
+    }
+
+    return [{
+        id: 'playback-1',
+        label: 'Playback 1',
+        ports: jack.playbackPorts,
+    }];
+}
+
 function normalizeMacPdSource(source, index) {
     if (!source || typeof source !== 'object') {
         throw new Error(`Invalid Pd darwinSources entry at index ${index}`);
@@ -177,9 +252,7 @@ function validateAudioConfig(raw) {
             throw new Error('Missing JACK config');
         }
         normalizeCaptureSources(raw.jack);
-        if (!isPair(raw.jack.playbackPorts)) {
-            throw new Error('Missing JACK playbackPorts');
-        }
+        normalizePlaybackOutputs(raw.jack);
     }
 }
 
@@ -188,16 +261,21 @@ function normalizeAudioConfig(raw) {
 
     const jack = raw.jack || {};
     const pd = raw.pd || {};
-    const captureSources = raw.mode === 'jack' || !raw.mode ? normalizeCaptureSources(jack) : [];
-    const capturePorts = captureSources[0] ? captureSources[0].ports : [];
+    const usesJack = raw.mode === 'jack' || !raw.mode;
+    const capturePortPairs = usesJack ? normalizeCaptureSources(jack) : [];
+    const playbackPortPairs = usesJack ? normalizePlaybackOutputs(jack) : [];
+    const capturePorts = capturePortPairs[0] ? capturePortPairs[0].ports : [];
+    const playbackPorts = playbackPortPairs[0] ? playbackPortPairs[0].ports : [];
 
     return {
         name: raw.name,
         mode: raw.mode || 'jack',
         jackCardNameIncludes: jack.cardNameIncludes || '',
+        capturePortPairs,
+        playbackPortPairs,
         capturePorts,
-        captureSources,
-        playbackPorts: jack.playbackPorts || [],
+        captureSources: capturePortPairs,
+        playbackPorts,
         macPdChannels: pd.darwin || { adc: [1, 2], dac: [1, 2] },
         macPdSources: normalizeMacPdSources(pd),
         linuxPdChannels: pd.linux || { adc: [1, 2], dac: [1, 2] },
@@ -225,7 +303,17 @@ function optionalMidiControl(controls, name, type) {
     return validateMidiControl(control, name, type);
 }
 
+function requireMidiControlValue(control, name, type) {
+    if (!control) {
+        throw new Error(`Missing MIDI control: ${name}`);
+    }
+    return validateMidiControl(control, name, type);
+}
+
 function validateMidiControl(control, name, type) {
+    if (!control || typeof control !== 'object') {
+        throw new Error(`MIDI control ${name} must be type ${type}`);
+    }
     if (control.type !== type) {
         throw new Error(`MIDI control ${name} must be type ${type}`);
     }
@@ -244,6 +332,18 @@ function validateMidiControl(control, name, type) {
     return control;
 }
 
+function validateDynamicAutoLoopControls(slotControls, controlName) {
+    if (slotControls.autoLoops === undefined) {
+        return;
+    }
+    if (!slotControls.autoLoops || typeof slotControls.autoLoops !== 'object' || Array.isArray(slotControls.autoLoops)) {
+        throw new Error(`MIDI control ${controlName}.autoLoops must be an object`);
+    }
+    Object.entries(slotControls.autoLoops).forEach(([durationKey, control]) => {
+        validateMidiControl(control, `${controlName}.autoLoops.${durationKey}`, 'note');
+    });
+}
+
 function validateMidiConfig(raw) {
     if (!raw.name) {
         throw new Error('Missing MIDI config name');
@@ -256,6 +356,29 @@ function validateMidiConfig(raw) {
     }
 
     const controls = raw.controls || {};
+    if (controls.slots) {
+        Object.entries(controls.slots).forEach(([slotName, slotControls]) => {
+            const controlName = `slots.${slotName}`;
+            if (!slotControls || typeof slotControls !== 'object') {
+                throw new Error(`Missing MIDI slot controls for ${slotName}`);
+            }
+            requireMidiControlValue(slotControls.button, `${controlName}.button`, 'note');
+            requireMidiControlValue(slotControls.endEncoder, `${controlName}.endEncoder`, 'cc');
+            optionalMidiControl(slotControls, 'startEncoder', 'cc');
+            optionalMidiControl(slotControls, 'moveEncoder', 'cc');
+            optionalMidiControl(slotControls, 'half', 'note');
+            optionalMidiControl(slotControls, 'double', 'note');
+            validateDynamicAutoLoopControls(slotControls, controlName);
+            requireMidiControlValue(slotControls.reset, `${controlName}.reset`, 'note');
+        });
+        optionalMidiControl(controls, 'tapTempo', 'note');
+        Object.keys(controls)
+            .filter((name) => /^captureSource[0-9]+$/.test(name))
+            .forEach((name) => optionalMidiControl(controls, name, 'note'));
+        requireMidiControl(controls, 'monitorButton', 'note');
+        return;
+    }
+
     requireMidiControl(controls, 'slot1Button', 'note');
     requireMidiControl(controls, 'slot2Button', 'note');
     requireMidiControl(controls, 'slot1EndEncoder', 'cc');
@@ -306,6 +429,46 @@ function normalizeAutoLoopControls(controls, slotPrefix) {
     }, {});
 }
 
+function normalizeDynamicAutoLoopControls(autoLoops = {}) {
+    return Object.entries(autoLoops).reduce((normalized, [durationKey, control]) => {
+        normalized[durationKey] = normalizeNoteControl(control);
+        return normalized;
+    }, {});
+}
+
+function normalizeSlotControl(control = {}) {
+    return {
+        note: control.button && control.button.note,
+        channel: control.button && control.button.channel,
+        encoderCC: control.endEncoder && control.endEncoder.controller,
+        encoderChannel: control.endEncoder && control.endEncoder.channel,
+        encoderMode: control.endEncoder && control.endEncoder.mode,
+        startEncoderCC: control.startEncoder ? control.startEncoder.controller : undefined,
+        startEncoderChannel: control.startEncoder ? control.startEncoder.channel : undefined,
+        startEncoderMode: control.startEncoder ? control.startEncoder.mode : undefined,
+        moveEncoderCC: control.moveEncoder ? control.moveEncoder.controller : undefined,
+        moveEncoderChannel: control.moveEncoder ? control.moveEncoder.channel : undefined,
+        moveEncoderMode: control.moveEncoder ? control.moveEncoder.mode : undefined,
+        autoLoops: normalizeDynamicAutoLoopControls(control.autoLoops),
+        half: normalizeNoteControl(control.half),
+        double: normalizeNoteControl(control.double),
+        reset: normalizeNoteControl(control.reset),
+    };
+}
+
+function normalizeLegacySlotControl(controls, slotName) {
+    return normalizeSlotControl({
+        button: controls[`${slotName}Button`],
+        endEncoder: controls[`${slotName}EndEncoder`],
+        startEncoder: controls[`${slotName}StartEncoder`],
+        moveEncoder: controls[`${slotName}MoveEncoder`],
+        reset: controls[`${slotName}Reset`],
+        half: controls[`${slotName}Half`],
+        double: controls[`${slotName}Double`],
+        autoLoops: normalizeAutoLoopControls(controls, slotName),
+    });
+}
+
 function normalizeCaptureSourceControls(controls) {
     return Object.keys(controls)
         .filter((name) => /^captureSource[0-9]+$/.test(name))
@@ -325,59 +488,29 @@ function normalizeMidiConfig(raw) {
     }
 
     const controls = raw.controls || {};
-    const slot1StartEncoder = controls.slot1StartEncoder || {};
-    const slot2StartEncoder = controls.slot2StartEncoder || {};
-    const slot1MoveEncoder = controls.slot1MoveEncoder || {};
-    const slot2MoveEncoder = controls.slot2MoveEncoder || {};
+    const slots = {};
+    if (controls.slots) {
+        Object.entries(controls.slots).forEach(([slotName, control]) => {
+            slots[slotName] = normalizeSlotControl(control);
+        });
+    } else {
+        slots.slot1 = normalizeLegacySlotControl(controls, 'slot1');
+        slots.slot2 = normalizeLegacySlotControl(controls, 'slot2');
+    }
 
     return {
         name: raw.name,
         midiName: raw.match,
         controls,
-        slot1: {
-            note: controls.slot1Button.note,
-            channel: controls.slot1Button.channel,
-            encoderCC: controls.slot1EndEncoder.controller,
-            encoderChannel: controls.slot1EndEncoder.channel,
-            encoderMode: controls.slot1EndEncoder.mode,
-            startEncoderCC: slot1StartEncoder.controller,
-            startEncoderChannel: slot1StartEncoder.channel,
-            startEncoderMode: slot1StartEncoder.mode,
-            moveEncoderCC: slot1MoveEncoder.controller,
-            moveEncoderChannel: slot1MoveEncoder.channel,
-            moveEncoderMode: slot1MoveEncoder.mode,
-            autoLoops: normalizeAutoLoopControls(controls, 'slot1'),
-            half: normalizeNoteControl(controls.slot1Half),
-            double: normalizeNoteControl(controls.slot1Double),
-        },
-        slot2: {
-            note: controls.slot2Button.note,
-            channel: controls.slot2Button.channel,
-            encoderCC: controls.slot2EndEncoder.controller,
-            encoderChannel: controls.slot2EndEncoder.channel,
-            encoderMode: controls.slot2EndEncoder.mode,
-            startEncoderCC: slot2StartEncoder.controller,
-            startEncoderChannel: slot2StartEncoder.channel,
-            startEncoderMode: slot2StartEncoder.mode,
-            moveEncoderCC: slot2MoveEncoder.controller,
-            moveEncoderChannel: slot2MoveEncoder.channel,
-            moveEncoderMode: slot2MoveEncoder.mode,
-            autoLoops: normalizeAutoLoopControls(controls, 'slot2'),
-            half: normalizeNoteControl(controls.slot2Half),
-            double: normalizeNoteControl(controls.slot2Double),
-        },
+        slots,
+        slot1: slots.slot1,
+        slot2: slots.slot2,
         monitor: {
             note: controls.monitorButton.note,
             channel: controls.monitorButton.channel,
         },
-        encoderPress1: {
-            note: controls.slot1Reset.note,
-            channel: controls.slot1Reset.channel,
-        },
-        encoderPress2: {
-            note: controls.slot2Reset.note,
-            channel: controls.slot2Reset.channel,
-        },
+        encoderPress1: slots.slot1 && slots.slot1.reset,
+        encoderPress2: slots.slot2 && slots.slot2.reset,
         tapTempo: normalizeNoteControl(controls.tapTempo),
         captureSources: normalizeCaptureSourceControls(controls),
     };
@@ -393,11 +526,15 @@ function getRuntimeConfig(options = {}) {
     const sourcePatchPath = path.join(projectRoot, 'src', 'engine.pd');
     const runtimePatchPath = path.join(projectRoot, '.runtime', 'engine.pd');
     const pdChannels = platform === 'darwin' ? audio.macPdChannels : audio.linuxPdChannels;
-    const generateRuntimePatch = platform === 'darwin';
+    const generateRuntimePatch = true;
+    const topology = normalizeTopology(options);
+    const slots = buildSlots(topology);
 
     return {
         projectRoot,
         platform,
+        topology,
+        slots,
         audioDeviceName: options.audioConfigPath ? audio.name : (options.audioDevice || 'XONE'),
         midiDeviceName: options.midiConfigPath ? midi.name : (options.midiDevice || 'XONE'),
         audioConfigPath,
@@ -492,7 +629,95 @@ function rewriteMacSourceSelectorConnections(source, config) {
     return lines.join('\n');
 }
 
+function buildPdChannelList(pairCount) {
+    return Array.from({ length: pairCount * 2 }, (_, index) => index + 1);
+}
+
+function renderGeneratedEnginePatch(config) {
+    const topology = config.topology;
+    const slots = config.slots;
+    const audioChannels = buildPdChannelList(topology.channels);
+    const abstraction = topology.slotsPerChannel === 4 ? 'channel_4slot' : 'channel_2slot';
+    const monitorRoutes = Array.from(
+        { length: topology.channels },
+        (_, index) => `monitor${index + 1}`
+    );
+    const lines = [
+        '#N canvas 171 24 1100 700 10;',
+        '#X declare -path ../src;',
+        '#X obj 13 8 netreceive -u -b 9000;',
+        '#X obj 14 29 oscparse;',
+        '#X obj 14 63 list trim;',
+        `#X obj 201 112 route connect source ${monitorRoutes.join(' ')};`,
+        `#X obj 14 130 adc~ ${audioChannels.join(' ')};`,
+        `#X obj 184 560 dac~ ${audioChannels.join(' ')};`,
+        '#X obj 535 8 loadbang;',
+        '#X msg 535 63 \\; pd dsp 1;',
+        '#X obj 505 398 netsend -u -b;',
+        '#X obj 505 318 loadbang;',
+        '#X msg 505 364 connect 127.0.0.1 9001;',
+    ];
+
+    const netreceive = 0;
+    const oscparse = 1;
+    const listTrim = 2;
+    const route = 3;
+    const adc = 4;
+    const dac = 5;
+    const dspLoadbang = 6;
+    const dspMessage = 7;
+    const netsend = 8;
+    const netsendLoadbang = 9;
+    const connectMessage = 10;
+    const channelStart = 11;
+    const monitorMessageStart = channelStart + topology.channels;
+
+    for (let channelIndex = 0; channelIndex < topology.channels; channelIndex += 1) {
+        const channelSlots = slots
+            .filter((slot) => slot.channelId === channelIndex + 1)
+            .map((slot) => slot.name);
+        lines.push(
+            `#X obj ${14 + channelIndex * 260} 283 ${abstraction} ${channelSlots.join(' ')};`
+        );
+    }
+
+    for (let channelIndex = 0; channelIndex < topology.channels; channelIndex += 1) {
+        lines.push(`#X msg ${14 + channelIndex * 260} 224 monitor \\$1;`);
+    }
+
+    const connections = [
+        `#X connect ${netreceive} 0 ${oscparse} 0;`,
+        `#X connect ${oscparse} 0 ${listTrim} 0;`,
+        `#X connect ${listTrim} 0 ${route} 0;`,
+        `#X connect ${route} 0 ${connectMessage} 0;`,
+        `#X connect ${dspLoadbang} 0 ${dspMessage} 0;`,
+        `#X connect ${netsendLoadbang} 0 ${connectMessage} 0;`,
+        `#X connect ${connectMessage} 0 ${netsend} 0;`,
+    ];
+
+    for (let channelIndex = 0; channelIndex < topology.channels; channelIndex += 1) {
+        const channelObject = channelStart + channelIndex;
+        const monitorMessage = monitorMessageStart + channelIndex;
+        const monitorOutlet = 2 + channelIndex;
+        const unmatchedOutlet = 2 + topology.channels;
+        connections.push(`#X connect ${route} ${unmatchedOutlet} ${channelObject} 2;`);
+        connections.push(`#X connect ${route} ${monitorOutlet} ${monitorMessage} 0;`);
+        connections.push(`#X connect ${monitorMessage} 0 ${channelObject} 2;`);
+        connections.push(`#X connect ${adc} ${channelIndex * 2} ${channelObject} 0;`);
+        connections.push(`#X connect ${adc} ${channelIndex * 2 + 1} ${channelObject} 1;`);
+        connections.push(`#X connect ${channelObject} 0 ${dac} ${channelIndex * 2};`);
+        connections.push(`#X connect ${channelObject} 1 ${dac} ${channelIndex * 2 + 1};`);
+        connections.push(`#X connect ${channelObject} 2 ${netsend} 0;`);
+    }
+
+    return `${lines.join('\n')}\n${connections.join('\n')}\n`;
+}
+
 function renderEnginePatch(source, config) {
+    if (config.topology) {
+        return renderGeneratedEnginePatch(config);
+    }
+
     const adcChannels = config.pd.generateRuntimePatch && config.audio.macPdSources.length > 0
         ? config.audio.macPdSources.flatMap((sourceConfig) => sourceConfig.adc)
         : config.pd.channels.adc;
@@ -548,6 +773,10 @@ function renderShellConfig(config) {
         JACK_CAPTURE_RIGHT: config.audio.capturePorts ? config.audio.capturePorts[1] : '',
         JACK_PLAYBACK_LEFT: config.audio.playbackPorts ? config.audio.playbackPorts[0] : '',
         JACK_PLAYBACK_RIGHT: config.audio.playbackPorts ? config.audio.playbackPorts[1] : '',
+        JACK_CAPTURE_PORT_PAIRS: config.audio.capturePortPairs.map((pair) => pair.ports.join(',')).join(';'),
+        JACK_PLAYBACK_PORT_PAIRS: config.audio.playbackPortPairs.map((pair) => pair.ports.join(',')).join(';'),
+        CHANNELS: config.topology.channels,
+        SLOTS_PER_CHANNEL: config.topology.slotsPerChannel,
         JACK_SAMPLE_RATE: config.jack.sampleRate,
         JACK_PERIOD_SIZE: config.jack.periodSize,
         JACK_PERIODS: config.jack.periods,

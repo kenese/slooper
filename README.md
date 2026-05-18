@@ -4,7 +4,7 @@ A DIY raspberry pi looper built using Node.js and Pure Data (Pd). This is a vibe
 
 ## Features
 
-- **Dual-Slot Looping**: Two independent looping slots with dedicated hardware controls.
+- **Configurable Loop Topology**: Start with 1-4 independent stereo channels and either 2 or 4 slots per channel.
 - **Dynamic Hardware Support**:
 Currently hardcoded to support the following but should work with any usb midi devices and class compliant audio interfaces
   - **MIDI Controllers**: Allen & Heath PX5 and Native Instruments Traktor X1 MK3.
@@ -130,6 +130,20 @@ Start the application using the provided shell script. This will automatically c
 ./start.sh
 ```
 
+## Runtime topology
+
+Slooper can start with a configurable number of stereo channels and slots per channel:
+
+```bash
+./start.sh channels=1 slots-per-channel=2
+./start.sh channels=2 slots-per-channel=4
+./start.sh channels=3 slots-per-channel=2
+```
+
+Slots are named globally. With `channels=2 slots-per-channel=4`, channel 1 owns `slot1`-`slot4`, and channel 2 owns `slot5`-`slot8`.
+
+Each channel has one dry monitor path. Any playing slot in a channel mutes that channel's dry monitor only; other channels remain independent.
+
 ### Testing
 
 Unit tests do not need Pure Data, MIDI hardware, JACK, or an audio device:
@@ -138,7 +152,7 @@ Unit tests do not need Pure Data, MIDI hardware, JACK, or an audio device:
 npm test
 ```
 
-The engine tests are OSC integration tests. Start Pure Data with `src/engine.pd` loaded first, then run:
+The engine tests are OSC integration tests. `./start.sh` generates `.runtime/engine.pd` for the configured topology. Start Pure Data with the generated patch loaded first, then run:
 
 ```bash
 npm run test:engine
@@ -152,31 +166,33 @@ npm run test:engine:managed
 
 ## Pure Data Architecture
 
-The Pure Data side is split into a small top-level host patch and a reusable slot abstraction.
+The Pure Data side is split into a generated top-level host patch, reusable channel abstractions, and a reusable slot abstraction.
 
 ```text
-src/engine.pd
+.runtime/engine.pd
   netreceive 9000
     -> oscparse
     -> list trim
-    -> route slot1 slot2 monitor connect
+    -> route connect source monitor1 monitor2 ...
 
-  adc~
+  adc~ 1 2 3 4 ...
     -> input gain
-    -> looper_slot slot1
-    -> looper_slot slot2
+    -> channel_2slot/channel_4slot per stereo channel
 
-  slot audio outputs
-    -> stereo sum
-    -> dac~
+  channel audio outputs
+    -> dac~ 1 2 3 4 ...
 
-  slot state outputs
+  channel state outputs
     -> netsend 9001
 ```
 
-`src/engine.pd` should stay thin. It owns OSC routing, shared audio input/output, monitor passthrough, slot summing, DSP startup, and the outbound OSC connection back to Node/browser tests.
+`engine.pd` is generated at startup into `.runtime/engine.pd`.
+It hosts one `[channel_2slot ...]` or `[channel_4slot ...]` abstraction per configured stereo channel.
+`looper_slot.pd` remains the per-slot DSP engine.
 
-`src/looper_slot.pd` owns one loop slot. It is instantiated as `[looper_slot slot1]`, `[looper_slot slot2]`, etc.
+`src/channel_2slot.pd` and `src/channel_4slot.pd` own channel-local routing: they receive one stereo input pair, host the channel's slots, sum slot playback to one stereo output pair, apply the channel dry monitor gate, and forward slot state messages.
+
+`src/looper_slot.pd` owns one loop slot. It is instantiated by the channel abstractions as `[looper_slot slot1]`, `[looper_slot slot2]`, etc.
 
 ```text
 looper_slot inlets:
@@ -211,14 +227,7 @@ Length handling inside `looper_slot.pd` has four separate memories:
 
 `rec 0`, `crop`, `cropStart`, `reset`, `setLength`, and `clear` emit `/state slotX length ...`. `cropStart` also emits `/state slotX start ...`. `play` emits only `playing`/`paused` state.
 
-To add another slot later, the expected Pd work is:
-
-1. Add the slot name to the top-level route, e.g. `slot3`.
-2. Add `[looper_slot slot3]`.
-3. Connect shared stereo input into the new slot.
-4. Connect the new slot's stereo outputs into the stereo sum.
-5. Connect the new slot's state outlet into `netsend`.
-6. Add the matching Node MIDI/OSC state mapping.
+To change the number of slots, use `channels=` and `slots-per-channel=` at startup. Adding a new supported slots-per-channel size would require a matching `src/channel_Nslot.pd` abstraction and renderer support in `src/config.js`.
 
 ### Configuration
 
@@ -267,7 +276,7 @@ The older aliases still work and resolve to the bundled JSON files:
 ```bash
 # Default XONE profile.
 # On Linux/JACK, Pd stays on logical adc~ 1 2 / dac~ 1 2 and JACK maps hardware capture_9/10.
-# On Mac, ./start.sh generates .runtime/engine.pd for direct device channel selection.
+# ./start.sh generates .runtime/engine.pd for the selected channel topology.
 ./start.sh
 
 # Traktor Z1
@@ -282,15 +291,17 @@ Inspect the resolved runtime config without starting anything:
 ```bash
 ./start.sh --print-config device=MAC midi-device=OSC
 ./start.sh --print-config --midi-config=config/midi/example.json --audio-config=config/audio/generic-jack-1-2.json
+./start.sh --print-config channels=2 slots-per-channel=4
 ```
 
 **Combine Arguments:**
 ```bash
 ./start.sh midi-device=X1MK3 audio-device=Z1
 ./start.sh device=MAC midi-device=OSC
+./start.sh audio-device=XONE midi-device=X1MK3 channels=2 slots-per-channel=2
 ```
 
-To add a new MIDI controller, copy `config/midi/example.json` and update the `match` string plus note/CC values. The first pass supports note buttons and `relative-64` CC encoders for the existing two-slot control surface:
+To add a new MIDI controller, copy `config/midi/example.json` and update the `match` string plus note/CC values. MIDI configs can define a dynamic `controls.slots` map keyed by global slot name (`slot1`, `slot2`, etc.). Legacy two-slot fields are still supported:
 
 - `slot1Button`
 - `slot2Button`
@@ -313,11 +324,9 @@ Use the MIDI logger to discover values:
 npm run midi:log
 ```
 
-To add a new class-compliant audio interface, copy `config/audio/generic-jack-1-2.json`. On Linux/Pi with JACK, keep Pd on logical `adc~ 1 2` and `dac~ 1 2`; set `jack.capturePorts` and `jack.playbackPorts` to map the hardware channels. For multiple selectable input sources, use `jack.capturePortPairs`, where each entry has `id`, `label`, and stereo `ports`; the first entry is connected at startup, and web/MIDI source selection rewires JACK into `pure_data:input_1/2`. On macOS/native Pd, use the `pd.darwin.adc` and `pd.darwin.dac` arrays for direct channel selection in the generated runtime patch.
+To add a new class-compliant audio interface, copy `config/audio/generic-jack-1-2.json`. On Linux/Pi with JACK, keep Pd on logical channel pairs and set `jack.capturePortPairs` plus `jack.playbackPortPairs` to map hardware channels. With `channels=2`, the first capture/playback pair maps to Pure Data input/output `1/2`, and the second maps to `3/4`. On macOS/native Pd, use the `pd.darwin.adc` and `pd.darwin.dac` arrays for direct channel selection in the generated runtime patch.
 
 When only one capture pair is configured, the web controller shows **Send Mode** because source selection still happens outside Slooper. When multiple pairs are configured, it shows **Switching** and renders one source button per pair.
-
-Future routing idea: investigate a mode where each capture source owns one or two dedicated looper slots, so the user does not need to choose an input before recording. That would also need distinct output/playback routing per source, so each capture channel returns to its own playback channel pair.
 
 **Play Mode (Resume Behavior):**
 

@@ -20,6 +20,8 @@ function parseArgs(argv) {
         else if (arg.startsWith('device=')) options.audioDevice = arg.split('=')[1];
         else if (arg.startsWith('audio-device=')) options.audioDevice = arg.split('=')[1];
         else if (arg.startsWith('midi-device=')) options.midiDevice = arg.split('=')[1];
+        else if (arg.startsWith('channels=')) options.channels = arg.split('=')[1];
+        else if (arg.startsWith('slots-per-channel=')) options.slotsPerChannel = arg.split('=')[1];
     }
 
     return options;

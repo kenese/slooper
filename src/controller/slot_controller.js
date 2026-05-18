@@ -11,9 +11,15 @@ const SlotState = {
 
 const SlotStateLabel = ['EMPTY', 'RECORDING', 'PLAYING', 'STOPPED', 'PENDING'];
 
-function createSlot(id) {
+function createSlot(slot) {
+    const slotConfig = typeof slot === 'object' && slot !== null ? slot : { id: slot };
+    const id = Number(slotConfig.id);
+
     return {
         id,
+        name: slotConfig.name || `slot${id}`,
+        channelId: slotConfig.channelId || 1,
+        indexInChannel: slotConfig.indexInChannel || id,
         state: SlotState.EMPTY,
         recordStartTime: 0,
         lengthMs: 0,
@@ -85,6 +91,9 @@ class SlotController {
         return {
             slots: this.slots.map((slot) => ({
                 id: slot.id,
+                name: slot.name,
+                channelId: slot.channelId,
+                indexInChannel: slot.indexInChannel,
                 state: slot.state,
                 stateLabel: SlotStateLabel[slot.state],
                 lengthMs: slot.lengthMs,
@@ -96,6 +105,11 @@ class SlotController {
             })),
             monitorEnabled: this.monitorEnabled,
             monitorActive: this.monitorActive,
+            channels: this.getChannelIds().map((channelId) => ({
+                id: channelId,
+                monitorEnabled: this.monitorEnabled,
+                monitorActive: this.isChannelMonitorActive(channelId),
+            })),
             inputRouting: {
                 mode: this.inputSources.length > 1 ? 'switching' : 'send',
                 selectedSourceId: this.selectedInputSourceId,
@@ -103,6 +117,18 @@ class SlotController {
             },
             tempo: this.getTempoStatus(),
         };
+    }
+
+    getChannelIds() {
+        return [...new Set(this.slots.map((slot) => slot.channelId))]
+            .sort((a, b) => a - b);
+    }
+
+    isChannelMonitorActive(channelId) {
+        const anyPlaying = this.slots.some((slot) => (
+            slot.channelId === channelId && slot.state === SlotState.PLAYING
+        ));
+        return this.monitorEnabled && !anyPlaying;
     }
 
     getTempoStatus() {
@@ -483,14 +509,17 @@ class SlotController {
     }
 
     async updateMonitorState() {
-        const anyPlaying = this.slots.some((slot) => slot.state === SlotState.PLAYING);
-        this.monitorActive = this.monitorEnabled && !anyPlaying;
-        await this.send('/monitor', this.monitorActive ? 1 : 0);
+        const channelIds = this.getChannelIds();
+        for (const channelId of channelIds) {
+            const active = this.isChannelMonitorActive(channelId);
+            await this.send(`/monitor${channelId}`, active ? 1 : 0);
+        }
+        this.monitorActive = channelIds.every((channelId) => this.isChannelMonitorActive(channelId));
     }
 
     refreshMonitorActive() {
-        const anyPlaying = this.slots.some((slot) => slot.state === SlotState.PLAYING);
-        this.monitorActive = this.monitorEnabled && !anyPlaying;
+        const channelIds = this.getChannelIds();
+        this.monitorActive = channelIds.every((channelId) => this.isChannelMonitorActive(channelId));
     }
 
     applyPdState(args) {

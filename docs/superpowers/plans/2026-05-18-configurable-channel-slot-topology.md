@@ -53,7 +53,7 @@ monitorActive = monitorEnabled && !slotsInChannel.some(slot => slot.state === Sl
 - Modify: `src/config.js`
 - Test: `test/unit/config.test.js`
 
-- [ ] **Step 1: Write failing topology tests**
+- [x] **Step 1: Write failing topology tests**
 
 Add tests near the existing runtime config tests in `test/unit/config.test.js`:
 
@@ -106,7 +106,7 @@ test('runtime config rejects unsupported topology values', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -116,7 +116,7 @@ npm run test:unit -- test/unit/config.test.js
 
 Expected: FAIL because `config.topology` and `config.slots` do not exist.
 
-- [ ] **Step 3: Implement topology normalization**
+- [x] **Step 3: Implement topology normalization**
 
 Add these helpers in `src/config.js` near the existing normalization helpers:
 
@@ -175,7 +175,7 @@ topology,
 slots,
 ```
 
-- [ ] **Step 4: Run tests and confirm pass**
+- [x] **Step 4: Run tests and confirm pass**
 
 Run:
 
@@ -185,7 +185,7 @@ npm run test:unit -- test/unit/config.test.js
 
 Expected: PASS for the new topology tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/config.js test/unit/config.test.js
@@ -202,7 +202,7 @@ git commit -m "feat: add runtime topology config"
 - Modify: `start.sh`
 - Test: `test/unit/start_script.test.js`
 
-- [ ] **Step 1: Add argument parsing tests**
+- [x] **Step 1: Add argument parsing tests**
 
 In `test/unit/start_script.test.js`, add assertions against the script source:
 
@@ -236,7 +236,7 @@ test('runtime config accepts numeric topology options from CLI strings', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -246,7 +246,7 @@ npm run test:unit -- test/unit/start_script.test.js test/unit/config.test.js
 
 Expected: FAIL on the `start.sh` source checks.
 
-- [ ] **Step 3: Update Node argument parsing**
+- [x] **Step 3: Update Node argument parsing**
 
 In both `src/index.js` and `src/dev_controller.js`, add:
 
@@ -262,7 +262,7 @@ channels: channelsArg ? channelsArg.split('=')[1] : undefined,
 slotsPerChannel: slotsPerChannelArg ? slotsPerChannelArg.split('=')[1] : undefined,
 ```
 
-- [ ] **Step 4: Update `start.sh` defaults and forwarding**
+- [x] **Step 4: Update `start.sh` defaults and forwarding**
 
 Add defaults near the existing argument defaults:
 
@@ -286,7 +286,7 @@ channels="$CHANNELS" slots-per-channel="$SLOTS_PER_CHANNEL"
 
 If `start.sh` already passes the original `"$@"` into Node, keep that behavior; the explicit shell variables are for Pd/JACK config generation.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run:
 
@@ -296,7 +296,7 @@ npm run test:unit -- test/unit/start_script.test.js test/unit/config.test.js
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/index.js src/dev_controller.js start.sh test/unit/start_script.test.js test/unit/config.test.js
@@ -312,7 +312,7 @@ git commit -m "feat: parse channel topology startup args"
 - Test: `test/unit/config.test.js`
 - Test: `test/unit/engine_patch.test.js`
 
-- [ ] **Step 1: Add failing engine generation tests**
+- [x] **Step 1: Add failing engine generation tests**
 
 In `test/unit/config.test.js`, add:
 
@@ -360,7 +360,7 @@ test('generated engine patch accepts source and monitor messages', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -370,7 +370,7 @@ npm run test:unit -- test/unit/config.test.js test/unit/engine_patch.test.js
 
 Expected: FAIL because `renderEnginePatch` still rewrites the static `src/engine.pd`.
 
-- [ ] **Step 3: Implement generated patch rendering**
+- [x] **Step 3: Implement generated patch rendering**
 
 In `src/config.js`, add:
 
@@ -476,7 +476,7 @@ Set `generateRuntimePatch` to `true` for all platforms in `getRuntimeConfig`:
 const generateRuntimePatch = true;
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run:
 
@@ -486,7 +486,7 @@ npm run test:unit -- test/unit/config.test.js test/unit/engine_patch.test.js
 
 Expected: PASS for generated patch tests. Update any old tests that expect Linux to use tracked `src/engine.pd`; Linux should now use `.runtime/engine.pd`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/config.js test/unit/config.test.js test/unit/engine_patch.test.js
@@ -502,7 +502,7 @@ git commit -m "feat: generate engine patch from topology"
 - Create: `src/channel_4slot.pd`
 - Test: `test/unit/engine_patch.test.js`
 
-- [ ] **Step 1: Write abstraction existence tests**
+- [x] **Step 1: Write abstraction existence tests**
 
 Add to `test/unit/engine_patch.test.js`:
 
@@ -524,7 +524,7 @@ test('channel abstractions expose expected looper slots and monitor gate', () =>
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -534,7 +534,7 @@ npm run test:unit -- test/unit/engine_patch.test.js
 
 Expected: FAIL because the new Pd files do not exist.
 
-- [ ] **Step 3: Create `channel_2slot.pd` in the Pd GUI**
+- [x] **Step 3: Create `channel_2slot.pd` in the Pd GUI**
 
 Use the Pd GUI to create the abstraction rather than hand-editing connection-heavy patch text. The contract must be:
 
@@ -575,7 +575,7 @@ line~
 
 Do not add monitor audio per slot. Add exactly one dry stereo monitor path per channel abstraction.
 
-- [ ] **Step 4: Create `channel_4slot.pd` in the Pd GUI**
+- [x] **Step 4: Create `channel_4slot.pd` in the Pd GUI**
 
 Use the same contract as `channel_2slot.pd`, but route `$1` through `$4` and sum four slot outputs into one stereo channel output.
 
@@ -590,7 +590,7 @@ looper_slot \$4
 line~
 ```
 
-- [ ] **Step 5: Run patch structure tests**
+- [x] **Step 5: Run patch structure tests**
 
 Run:
 
@@ -600,7 +600,7 @@ npm run test:unit -- test/unit/engine_patch.test.js
 
 Expected: PASS.
 
-- [ ] **Step 6: Run managed engine smoke test for 1 channel / 2 slots**
+- [x] **Step 6: Run managed engine smoke test for 1 channel / 2 slots**
 
 Run:
 
@@ -616,7 +616,11 @@ npm run test:engine
 
 Expected: current `slot1` and `slot2` integration tests pass.
 
-- [ ] **Step 7: Commit**
+Verified 2026-05-18:
+- `npm run test:engine` passed with 41 passed, 0 failed after restarting Pd against generated `.runtime/engine.pd`.
+- Smoke exposed a `setLength`/`cropStart` regression in `looper_slot.pd`; fixed by giving `setLength` a side-effect-free start-offset memory and covering it in `test/unit/looper_slot_patch.test.js`.
+
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/channel_2slot.pd src/channel_4slot.pd test/unit/engine_patch.test.js
@@ -631,7 +635,7 @@ git commit -m "feat: add reusable channel abstractions"
 - Modify: `src/controller/slot_controller.js`
 - Test: `test/unit/slot_controller.test.js`
 
-- [ ] **Step 1: Add failing channel monitor tests**
+- [x] **Step 1: Add failing channel monitor tests**
 
 Add to `test/unit/slot_controller.test.js`:
 
@@ -677,7 +681,7 @@ test('monitor state is independent per channel', async () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -687,7 +691,7 @@ npm run test:unit -- test/unit/slot_controller.test.js
 
 Expected: FAIL because slots are numeric IDs only and monitor is global.
 
-- [ ] **Step 3: Update slot creation**
+- [x] **Step 3: Update slot creation**
 
 In `src/controller/slot_controller.js`, change `createSlot` to accept metadata:
 
@@ -724,7 +728,7 @@ Keep:
 this.slots = (options.slots || [1, 2]).map(createSlot);
 ```
 
-- [ ] **Step 4: Add channel monitor state helpers**
+- [x] **Step 4: Add channel monitor state helpers**
 
 Add methods:
 
@@ -751,7 +755,7 @@ channels: this.getChannelIds().map((channelId) => ({
 })),
 ```
 
-- [ ] **Step 5: Update monitor sends**
+- [x] **Step 5: Update monitor sends**
 
 Replace `updateMonitorState()` with:
 
@@ -775,7 +779,7 @@ refreshMonitorActive() {
 
 For backward compatibility with old tests, either update tests from `/monitor` to `/monitor1`, or temporarily send both `/monitor1` and `/monitor` only when there is one channel. Prefer updating tests.
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run:
 
@@ -785,7 +789,7 @@ npm run test:unit -- test/unit/slot_controller.test.js
 
 Expected: PASS after updating old monitor expectations from `/monitor` to `/monitor1`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/controller/slot_controller.js test/unit/slot_controller.test.js
@@ -801,7 +805,7 @@ git commit -m "feat: make monitor state channel aware"
 - Modify: `src/dev_controller.js`
 - Test: `test/unit/slot_controller.test.js`
 
-- [ ] **Step 1: Add construction assertions if needed**
+- [x] **Step 1: Add construction assertions if needed**
 
 If there is no direct test for `createController` options in web/dev setup, add a unit test around `createController` only:
 
@@ -816,7 +820,7 @@ test('controller defaults preserve legacy two slot topology', () => {
 });
 ```
 
-- [ ] **Step 2: Update controller construction**
+- [x] **Step 2: Update controller construction**
 
 In `src/index.js`, pass:
 
@@ -832,7 +836,7 @@ In `src/dev_controller.js`, pass the same:
 slots: runtimeConfig.slots,
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run:
 
@@ -842,7 +846,7 @@ npm run test:unit
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/index.js src/dev_controller.js test/unit/slot_controller.test.js
@@ -861,7 +865,7 @@ git commit -m "feat: initialize controller from runtime slots"
 - Modify: `config/midi/traktor-x1mk3.json`
 - Test: `test/unit/config.test.js`
 
-- [ ] **Step 1: Add failing MIDI normalization test**
+- [x] **Step 1: Add failing MIDI normalization test**
 
 In `test/unit/config.test.js`, add:
 
@@ -904,7 +908,7 @@ test('MIDI configs can define dynamic slot control map', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -914,7 +918,7 @@ npm run test:unit -- test/unit/config.test.js
 
 Expected: FAIL because `controls.slots` is not normalized.
 
-- [ ] **Step 3: Add slot-control normalization helper**
+- [x] **Step 3: Add slot-control normalization helper**
 
 In `src/config.js`, add:
 
@@ -983,7 +987,7 @@ encoderPress1: slotControls.slot1 && slotControls.slot1.reset,
 encoderPress2: slotControls.slot2 && slotControls.slot2.reset,
 ```
 
-- [ ] **Step 4: Run config tests**
+- [x] **Step 4: Run config tests**
 
 Run:
 
@@ -993,7 +997,7 @@ npm run test:unit -- test/unit/config.test.js
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/config.js test/unit/config.test.js
@@ -1008,7 +1012,7 @@ git commit -m "feat: normalize dynamic MIDI slot controls"
 - Modify: `src/index.js`
 - Test: existing unit tests indirectly; add direct tests only if extracting helpers.
 
-- [ ] **Step 1: Replace hardcoded button slot list**
+- [x] **Step 1: Replace hardcoded button slot list**
 
 In `setupMidiHandlers`, replace:
 
@@ -1032,7 +1036,7 @@ const buttonSlots = runtimeConfig.slots
     .filter(Boolean);
 ```
 
-- [ ] **Step 2: Replace auto-loop and transform lists**
+- [x] **Step 2: Replace auto-loop and transform lists**
 
 Use:
 
@@ -1052,7 +1056,7 @@ const transformButtons = runtimeConfig.slots.flatMap((slot) => {
 });
 ```
 
-- [ ] **Step 3: Replace reset/encoder lookup**
+- [x] **Step 3: Replace reset/encoder lookup**
 
 Where code references `midi.slot1`, `midi.slot2`, `midi.encoderPress1`, or `midi.encoderPress2`, replace it with lookup by slot ID:
 
@@ -1070,7 +1074,7 @@ For move crop, compare against `control.moveEncoderCC` and `control.moveEncoderC
 
 For reset, compare against `control.reset.note` and `control.reset.channel`.
 
-- [ ] **Step 4: Update console mapping**
+- [x] **Step 4: Update console mapping**
 
 Change mapping output from hardcoded two slots to:
 
@@ -1083,7 +1087,7 @@ for (const slot of runtimeConfig.slots) {
 }
 ```
 
-- [ ] **Step 5: Run unit tests**
+- [x] **Step 5: Run unit tests**
 
 Run:
 
@@ -1093,7 +1097,7 @@ npm run test:unit
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/index.js
@@ -1111,7 +1115,7 @@ git commit -m "feat: drive MIDI handlers from slot topology"
 - Test: `test/unit/config.test.js`
 - Test: `test/unit/start_script.test.js`
 
-- [ ] **Step 1: Add failing audio pair tests**
+- [x] **Step 1: Add failing audio pair tests**
 
 In `test/unit/config.test.js`, add:
 
@@ -1159,7 +1163,7 @@ test('audio config exposes playback port pairs for multiple channels', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -1169,7 +1173,7 @@ npm run test:unit -- test/unit/config.test.js
 
 Expected: FAIL because playback port pairs are not normalized.
 
-- [ ] **Step 3: Add playback pair normalization**
+- [x] **Step 3: Add playback pair normalization**
 
 In `src/config.js`, add:
 
@@ -1227,7 +1231,7 @@ capturePorts: capturePortPairs[0].ports,
 playbackPorts: playbackPortPairs[0].ports,
 ```
 
-- [ ] **Step 4: Render shell config arrays**
+- [x] **Step 4: Render shell config arrays**
 
 In `renderShellConfig`, add:
 
@@ -1238,7 +1242,7 @@ CHANNELS: config.topology.channels,
 SLOTS_PER_CHANNEL: config.topology.slotsPerChannel,
 ```
 
-- [ ] **Step 5: Update `start.sh` JACK connection loop**
+- [x] **Step 5: Update `start.sh` JACK connection loop**
 
 Replace the single connect block with:
 
@@ -1261,7 +1265,7 @@ for ((i = 0; i < CHANNELS; i++)); do
 done
 ```
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run:
 
@@ -1271,7 +1275,7 @@ npm run test:unit -- test/unit/config.test.js test/unit/start_script.test.js
 
 Expected: PASS after updating old source assertions to the looped JACK behavior.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/config.js start.sh config/audio/xone-px5.json test/unit/config.test.js test/unit/start_script.test.js
@@ -1288,7 +1292,7 @@ git commit -m "feat: support multi-channel jack routing"
 - Test: `test/unit/dev_controller_html.test.js`
 - Test: `test/unit/web_server.test.js`
 
-- [ ] **Step 1: Add failing HTML tests**
+- [x] **Step 1: Add failing HTML tests**
 
 In `test/unit/dev_controller_html.test.js`, add source-level checks for dynamic rendering:
 
@@ -1302,7 +1306,7 @@ test('dev controller renders slots from state instead of fixed slot buttons', ()
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -1312,7 +1316,7 @@ npm run test:unit -- test/unit/dev_controller_html.test.js
 
 Expected: FAIL if the current UI is fixed to two slots.
 
-- [ ] **Step 3: Render slots grouped by channel**
+- [x] **Step 3: Render slots grouped by channel**
 
 In the browser JS template, derive:
 
@@ -1347,7 +1351,7 @@ Make each slot button call the existing action endpoint with the dynamic ID:
 <button data-action="tap" data-slot="${slot.id}">${slot.name || `Slot ${slot.id}`}</button>
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run:
 
@@ -1357,7 +1361,7 @@ npm run test:unit -- test/unit/dev_controller_html.test.js test/unit/web_server.
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/dev_controller.js test/unit/dev_controller_html.test.js test/unit/web_server.test.js
@@ -1372,7 +1376,7 @@ git commit -m "feat: render web controller from slot topology"
 - Modify: `test/test_engine.js`
 - Modify: `test/run_engine_tests.js`
 
-- [ ] **Step 1: Add multi-slot OSC test**
+- [x] **Step 1: Add multi-slot OSC test**
 
 In `test/test_engine.js`, add:
 
@@ -1397,7 +1401,7 @@ test('topology slots beyond slot2 respond independently', async () => {
 });
 ```
 
-- [ ] **Step 2: Update managed runner topology**
+- [x] **Step 2: Update managed runner topology**
 
 In `test/run_engine_tests.js`, make the managed Pd process start with a 2-channel/2-slot topology:
 
@@ -1413,7 +1417,7 @@ const args = [
 
 If the runner starts Pd directly, update its config call to pass `channels: 2` and `slotsPerChannel: 2`.
 
-- [ ] **Step 3: Run managed engine tests**
+- [x] **Step 3: Run managed engine tests**
 
 Run:
 
@@ -1423,7 +1427,7 @@ npm run test:engine:managed
 
 Expected: PASS. If Pd is not installed in the environment, record that as a local verification blocker and run unit tests instead.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/test_engine.js test/run_engine_tests.js
@@ -1438,7 +1442,7 @@ git commit -m "test: cover generated multi-channel engine topology"
 - Modify: `README.md`
 - Modify: `AGENTS.md` if present as a repo file
 
-- [ ] **Step 1: Update README startup examples**
+- [x] **Step 1: Update README startup examples**
 
 Add:
 
@@ -1458,7 +1462,7 @@ Slots are named globally. With `channels=2 slots-per-channel=4`, channel 1 owns 
 Each channel has one dry monitor path. Any playing slot in a channel mutes that channel's dry monitor only; other channels remain independent.
 ```
 
-- [ ] **Step 2: Update architecture docs**
+- [x] **Step 2: Update architecture docs**
 
 Replace the old two-slot engine description with:
 
@@ -1468,7 +1472,7 @@ It hosts one `[channel_2slot ...]` or `[channel_4slot ...]` abstraction per conf
 `looper_slot.pd` remains the per-slot DSP engine.
 ```
 
-- [ ] **Step 3: Run full unit suite**
+- [x] **Step 3: Run full unit suite**
 
 Run:
 
@@ -1478,7 +1482,7 @@ npm run test:unit
 
 Expected: PASS.
 
-- [ ] **Step 4: Run engine suite**
+- [x] **Step 4: Run engine suite**
 
 Run:
 
@@ -1506,7 +1510,9 @@ Verify:
 - Playing `slot3` mutes only channel 2 dry monitor.
 - `slot1` and `slot3` can play simultaneously.
 
-- [ ] **Step 6: Commit**
+Not run locally on 2026-05-18; requires Pi/XONE hardware.
+
+- [x] **Step 6: Commit**
 
 ```bash
 git add README.md AGENTS.md

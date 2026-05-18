@@ -206,6 +206,25 @@ test('slot2 responds with playing and paused states', async () => {
     await expectState('slot2', 'paused');
 });
 
+test('topology slots beyond slot2 respond independently', async () => {
+    await sendOSC('/slot3', 'rec', 1);
+    await expectState('slot3', 'recording');
+    await wait(150);
+    await sendOSC('/slot3', 'rec', 0);
+    await expectState('slot3', 'stopped');
+    await expectState('slot3', 'length');
+
+    await sendOSC('/slot4', 'rec', 1);
+    await expectState('slot4', 'recording');
+    await wait(150);
+    await sendOSC('/slot4', 'rec', 0);
+    await expectState('slot4', 'stopped');
+    await expectState('slot4', 'length');
+
+    assert.ok(getLastLength('slot3') > 0);
+    assert.ok(getLastLength('slot4') > 0);
+});
+
 // --- Phase Reset Tests ---
 
 test('play 1 resets phasor phase (visual verify loop starts from beginning)', async () => {

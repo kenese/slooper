@@ -15,6 +15,8 @@ const audioConfigArg = args.find((arg) => arg.startsWith('--audio-config='));
 const midiArg = args.find((arg) => arg.startsWith('midi-device='));
 const midiConfigArg = args.find((arg) => arg.startsWith('--midi-config='));
 const clockMidiArg = args.find((arg) => arg.startsWith('clock-midi-device=') || arg.startsWith('--clock-midi-device='));
+const channelsArg = args.find((arg) => arg.startsWith('channels='));
+const slotsPerChannelArg = args.find((arg) => arg.startsWith('slots-per-channel='));
 
 function getClockMidiDeviceName() {
     if (clockMidiArg) {
@@ -38,6 +40,8 @@ const runtimeConfig = getRuntimeConfig({
     audioConfigPath: audioConfigArg ? audioConfigArg.split('=')[1] : undefined,
     midiDevice: getClockMidiDeviceName(),
     midiConfigPath: midiConfigArg ? midiConfigArg.split('=')[1] : undefined,
+    channels: channelsArg ? channelsArg.split('=')[1] : undefined,
+    slotsPerChannel: slotsPerChannelArg ? slotsPerChannelArg.split('=')[1] : undefined,
 });
 
 runtimeConfig.osc.sendPort = Number(process.env.SLOOPER_OSC_SEND_PORT || runtimeConfig.osc.sendPort);
@@ -62,6 +66,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 controller = createController({
     transport,
     config: runtimeConfig.controller,
+    slots: runtimeConfig.slots,
     tempo,
     inputSources: runtimeConfig.audio.captureSources,
     inputRouter: runtimeConfig.platform === 'linux' && runtimeConfig.audio.mode === 'jack'

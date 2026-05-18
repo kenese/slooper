@@ -23,7 +23,24 @@
         "ports": ["system:capture_5", "system:capture_6"]
       }
     ],
-    "playbackPorts": ["system:playback_1", "system:playback_2"]
+    "playbackPorts": ["system:playback_1", "system:playback_2"],
+    "playbackPortPairs": [
+      {
+        "id": "main",
+        "label": "PX5 Main Out",
+        "ports": ["system:playback_1", "system:playback_2"]
+      },
+      {
+        "id": "ch2",
+        "label": "PX5 Output 2",
+        "ports": ["system:playback_3", "system:playback_4"]
+      },
+      {
+        "id": "ch3",
+        "label": "PX5 Output 3",
+        "ports": ["system:playback_5", "system:playback_6"]
+      }
+    ]
   },
   "pd": {
     "darwin": { "adc": [9, 10], "dac": [1, 2] },
