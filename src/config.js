@@ -5,6 +5,7 @@ const DEFAULT_PROJECT_ROOT = path.resolve(__dirname, '..');
 
 const AUDIO_ALIASES = {
     XONE: 'config/audio/xone-px5.json',
+    XONE_2C: 'config/audio/xone-px5-2channel.json',
     Z1: 'config/audio/traktor-z1.json',
     MAC: 'config/audio/blackhole-mac.json',
     BLACKHOLE: 'config/audio/blackhole-mac.json',
