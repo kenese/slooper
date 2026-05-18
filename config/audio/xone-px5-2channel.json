@@ -1,0 +1,43 @@
+{
+  "name": "Allen & Heath XONE:PX5 2 Channel",
+  "mode": "jack",
+  "jack": {
+    "cardNameIncludes": "XONE",
+    "sampleRate": 48000,
+    "periodSize": 128,
+    "periods": 2,
+    "capturePortPairs": [
+      {
+        "id": "ch1",
+        "label": "PX5 Channel 1",
+        "ports": ["system:capture_3", "system:capture_4"]
+      },
+      {
+        "id": "ch2",
+        "label": "PX5 Channel 2",
+        "ports": ["system:capture_5", "system:capture_6"]
+      }
+    ],
+    "playbackPorts": ["system:playback_3", "system:playback_4"],
+    "playbackPortPairs": [
+      {
+        "id": "ch1",
+        "label": "PX5 Output 1",
+        "ports": ["system:playback_3", "system:playback_4"]
+      },
+      {
+        "id": "ch2",
+        "label": "PX5 Output 2",
+        "ports": ["system:playback_5", "system:playback_6"]
+      }
+    ]
+  },
+  "pd": {
+    "darwin": { "adc": [3, 4], "dac": [3, 4] },
+    "darwinSources": [
+      { "id": "ch1", "adc": [3, 4] },
+      { "id": "ch2", "adc": [5, 6] }
+    ],
+    "linux": { "adc": [1, 2], "dac": [1, 2] }
+  }
+}

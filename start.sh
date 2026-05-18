@@ -17,9 +17,13 @@ APPLIANCE_MODE=false
 PRINT_CONFIG=false
 CHANNELS=1
 SLOTS_PER_CHANNEL=2
+WEB_ENABLED=false
 
 for arg in "$@"; do
     case "$arg" in
+        --web)
+            WEB_ENABLED=true
+            ;;
         --restart-jack)
             RESTART_JACK=true
             ;;
@@ -135,6 +139,28 @@ show_status() {
     done
 }
 
+check_web_port_available() {
+    if [ "$MIDI_DEVICE" != "OSC" ] && [ "$MIDI_DEVICE" != "WEB" ] && [ "$WEB_ENABLED" != true ]; then
+        return
+    fi
+
+    local web_port="${SLOOPER_WEB_PORT:-3000}"
+    if ! command -v lsof >/dev/null 2>&1; then
+        return
+    fi
+
+    local listeners
+    listeners="$(lsof -nP -iTCP:"$web_port" -sTCP:LISTEN 2>/dev/null || true)"
+    if [ -z "$listeners" ]; then
+        return
+    fi
+
+    echo "Web controller port $web_port is already in use:"
+    echo "$listeners"
+    echo "Stop the process using port $web_port or set SLOOPER_WEB_PORT to a free port before starting Slooper."
+    exit 1
+}
+
 if [ "$PRINT_CONFIG" = true ]; then
     node scripts/runtime_config.js --json "$@" "channels=$CHANNELS" "slots-per-channel=$SLOTS_PER_CHANNEL"
     exit 0
@@ -169,6 +195,7 @@ trap cleanup_on_exit EXIT INT TERM
 
 echo "Stopping previously tracked Slooper processes..."
 tracked_cleanup
+check_web_port_available
 
 echo "Configuring audio for: $AUDIO_DEVICE"
 if [ "$PD_GENERATE_RUNTIME_PATCH" = "1" ]; then

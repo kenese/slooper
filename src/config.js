@@ -13,6 +13,7 @@ const AUDIO_ALIASES = {
 const MIDI_ALIASES = {
     XONE: 'config/midi/xone-px5.json',
     X1MK3: 'config/midi/traktor-x1mk3.json',
+    X1MK3_2C: 'config/midi/traktor-x1mk3-2channel.json',
     OSC: 'config/midi/osc.json',
     WEB: 'config/midi/web.json',
 };

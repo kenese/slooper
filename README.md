@@ -107,6 +107,21 @@ If you are running this on a Raspberry Pi using Patchbox OS, you will need to in
    npm install
    ./start.sh
    ```
+   To use the browser controller on the Pi, run with the web MIDI mode:
+   ```bash
+   ./start.sh midi-device=WEB
+   ```
+   Slooper serves the web controller on the Pi at `127.0.0.1:3000`.
+
+   From your Mac, forward the Pi's web controller to a different local port, so it does not conflict with any local Slooper dev server:
+   ```bash
+   ssh -L 3001:127.0.0.1:3000 patch@patchbox.local
+   ```
+   Then open this on the Mac:
+   ```text
+   http://127.0.0.1:3001
+   ```
+   Avoid forwarding Mac port `3000` to Pi port `3000` if you also run Slooper locally on the Mac, because the local web controller also uses port `3000` by default.
 4. **Audio Setup**:
    Ensure your audio interface is configured correctly in Patchbox OS (using `patchbox` config tool or JACK). The startup script attempts to launch `pd`, but you may need to manually manage connections if using JACK.
 

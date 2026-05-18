@@ -39,6 +39,14 @@ test('start.sh force cleanup stops Slooper MIDI diagnostics that can hold ALSA p
     assert.match(startScript, /pkill -f "node src\/midi_logger\.js" 2>\/dev\/null \|\| true/);
 });
 
+test('start.sh checks web port availability before launching Pure Data', () => {
+    assert.match(startScript, /check_web_port_available\(\)/);
+    assert.match(
+        startScript,
+        /echo "Stopping previously tracked Slooper processes\.\.\."\ntracked_cleanup\ncheck_web_port_available\n\necho "Configuring audio for: \$AUDIO_DEVICE"/
+    );
+});
+
 test('start script forwards topology arguments into runtime config', () => {
     const source = fs.readFileSync(path.join(__dirname, '../../start.sh'), 'utf8');
 
