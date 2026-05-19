@@ -258,8 +258,51 @@ function validateAudioConfig(raw) {
     }
 }
 
-function normalizeAudioConfig(raw) {
+function inferRoutingMode(raw, topology) {
+    if (raw.routingMode) return raw.routingMode;
+    if (topology.channels > 1) return 'channel';
+    if (raw.mode === 'native-pd') return 'channel';
+    if (raw.jack && Array.isArray(raw.jack.playbackPortPairs) && raw.jack.playbackPortPairs.length > 1) return 'channel';
+    return 'send';
+}
+
+function normalizeRoutingMode(raw, topology) {
+    const routingMode = inferRoutingMode(raw, topology);
+    if (!['send', 'channel'].includes(routingMode)) {
+        throw new Error(`Unsupported audio routingMode: ${routingMode}`);
+    }
+    return routingMode;
+}
+
+function validateAudioRoutingMode(raw, routingMode, topology) {
+    if (routingMode === 'send') {
+        const jack = raw.jack || {};
+        if (Array.isArray(jack.playbackPortPairs) && jack.playbackPortPairs.length !== 1) {
+            throw new Error('send routing mode must expose exactly one playback pair');
+        }
+        if (topology.channels !== 1) {
+            throw new Error('send routing mode requires channels=1');
+        }
+        return;
+    }
+
+    if (routingMode === 'channel' && raw.mode === 'jack') {
+        const capturePairs = normalizeCaptureSources(raw.jack || {});
+        const playbackPairs = normalizePlaybackOutputs(raw.jack || {});
+        if (capturePairs.length < topology.channels) {
+            throw new Error(`channel routing mode requires at least ${topology.channels} capture pairs`);
+        }
+        if (playbackPairs.length < topology.channels) {
+            throw new Error(`channel routing mode requires at least ${topology.channels} playback pairs`);
+        }
+    }
+}
+
+function normalizeAudioConfig(raw, topology = normalizeTopology()) {
     validateAudioConfig(raw);
+
+    const routingMode = normalizeRoutingMode(raw, topology);
+    validateAudioRoutingMode(raw, routingMode, topology);
 
     const jack = raw.jack || {};
     const pd = raw.pd || {};
@@ -272,6 +315,7 @@ function normalizeAudioConfig(raw) {
     return {
         name: raw.name,
         mode: raw.mode || 'jack',
+        routingMode,
         jackCardNameIncludes: jack.cardNameIncludes || '',
         capturePortPairs,
         playbackPortPairs,
@@ -523,13 +567,13 @@ function getRuntimeConfig(options = {}) {
     const platform = normalizePlatform(options.platform);
     const audioConfigPath = getAudioConfigPath(projectRoot, options);
     const midiConfigPath = getMidiConfigPath(projectRoot, options);
-    const audio = normalizeAudioConfig(loadJsonFile(audioConfigPath));
+    const topology = normalizeTopology(options);
+    const audio = normalizeAudioConfig(loadJsonFile(audioConfigPath), topology);
     const midi = normalizeMidiConfig(loadJsonFile(midiConfigPath));
     const sourcePatchPath = path.join(projectRoot, 'src', 'engine.pd');
     const runtimePatchPath = path.join(projectRoot, '.runtime', 'engine.pd');
     const pdChannels = platform === 'darwin' ? audio.macPdChannels : audio.linuxPdChannels;
     const generateRuntimePatch = true;
-    const topology = normalizeTopology(options);
     const slots = buildSlots(topology);
 
     return {

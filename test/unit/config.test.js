@@ -180,6 +180,109 @@ test('runtime config rejects unsupported topology values', () => {
     );
 });
 
+test('audio config exposes explicit send routing mode', () => {
+    const config = getRuntimeConfig({
+        audioDevice: 'Z1',
+        midiDevice: 'WEB',
+        platform: 'linux',
+        projectRoot: path.join(__dirname, '../..'),
+    });
+
+    assert.equal(config.audio.routingMode, 'send');
+    assert.equal(config.topology.channels, 1);
+});
+
+test('audio config exposes explicit channel routing mode with one channel', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-audio-channel-one-'));
+    const file = path.join(dir, 'channel-one.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Channel One',
+        mode: 'native-pd',
+        routingMode: 'channel',
+        pd: {
+            darwin: { adc: [1, 2], dac: [1, 2] },
+            linux: { adc: [1, 2], dac: [1, 2] },
+        },
+    }));
+
+    const config = getRuntimeConfig({
+        audioConfigPath: file,
+        midiDevice: 'WEB',
+        platform: 'darwin',
+        projectRoot: path.join(__dirname, '../..'),
+        channels: 1,
+    });
+
+    assert.equal(config.audio.routingMode, 'channel');
+    assert.equal(config.topology.channels, 1);
+});
+
+test('send routing mode rejects multiple playback channel pairs', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-audio-bad-send-'));
+    const file = path.join(dir, 'bad-send.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Bad Send',
+        mode: 'jack',
+        routingMode: 'send',
+        jack: {
+            cardNameIncludes: 'Bad',
+            capturePorts: ['system:capture_1', 'system:capture_2'],
+            playbackPortPairs: [
+                { id: 'out1', ports: ['system:playback_1', 'system:playback_2'] },
+                { id: 'out2', ports: ['system:playback_3', 'system:playback_4'] },
+            ],
+        },
+        pd: {
+            darwin: { adc: [1, 2], dac: [1, 2] },
+            linux: { adc: [1, 2], dac: [1, 2] },
+        },
+    }));
+
+    assert.throws(
+        () => getRuntimeConfig({
+            audioConfigPath: file,
+            midiDevice: 'WEB',
+            platform: 'linux',
+            projectRoot: path.join(__dirname, '../..'),
+        }),
+        /send routing mode must expose exactly one playback pair/
+    );
+});
+
+test('channel routing mode rejects insufficient JACK capture pairs', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-audio-bad-channel-'));
+    const file = path.join(dir, 'bad-channel.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Bad Channel',
+        mode: 'jack',
+        routingMode: 'channel',
+        jack: {
+            cardNameIncludes: 'Bad',
+            capturePortPairs: [
+                { id: 'in1', ports: ['system:capture_1', 'system:capture_2'] },
+            ],
+            playbackPortPairs: [
+                { id: 'out1', ports: ['system:playback_1', 'system:playback_2'] },
+            ],
+        },
+        pd: {
+            darwin: { adc: [1, 2], dac: [1, 2] },
+            linux: { adc: [1, 2], dac: [1, 2] },
+        },
+    }));
+
+    assert.throws(
+        () => getRuntimeConfig({
+            audioConfigPath: file,
+            midiDevice: 'WEB',
+            platform: 'linux',
+            projectRoot: path.join(__dirname, '../..'),
+            channels: 2,
+        }),
+        /channel routing mode requires at least 2 capture pairs/
+    );
+});
+
 test('loads explicit JSON audio and MIDI config files', () => {
     const config = getRuntimeConfig({
         audioConfigPath: path.join(__dirname, '../../config/audio/xone-px5.json'),
