@@ -597,7 +597,13 @@
 
     function render() {
         if (!appState) return;
-        document.getElementById('input-routing').innerHTML = renderInputRouting(appState);
+        const inputRouting = renderInputRouting(appState);
+        if (inputRouting) {
+            document.getElementById('input-routing').innerHTML = inputRouting;
+        } else {
+            document.getElementById('input-routing').remove();
+        }
+
         document.getElementById('slots').innerHTML = renderChannels(appState);
         renderTempo(appState.tempo);
         document.getElementById('monitor-status').textContent =
