@@ -71,20 +71,13 @@ log_error() {
 }
 
 runtime_mode_label() {
-    case "$CHANNELS" in
-        1)
-            echo "Send Mode"
-            ;;
-        2)
-            echo "2 Channel Mode"
-            ;;
-        4)
-            echo "4 Channel Mode"
-            ;;
-        *)
-            echo "$CHANNELS Channel Mode"
-            ;;
-    esac
+    if [ "$AUDIO_ROUTING_MODE" = "send" ]; then
+        echo "Send Mode"
+    elif [ "$CHANNELS" = "1" ]; then
+        echo "Channel Mode (1 channel)"
+    else
+        echo "Channel Mode ($CHANNELS channels)"
+    fi
 }
 
 write_pid() {

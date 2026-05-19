@@ -1,6 +1,7 @@
 {
   "name": "Allen & Heath XONE:PX5 2 Channel",
   "mode": "jack",
+  "routingMode": "channel",
   "jack": {
     "cardNameIncludes": "XONE",
     "sampleRate": 48000,

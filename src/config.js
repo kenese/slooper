@@ -800,6 +800,7 @@ function renderShellConfig(config) {
         PROJECT_ROOT: config.projectRoot,
         PLATFORM: config.platform,
         AUDIO_DEVICE: config.audioDeviceName,
+        AUDIO_ROUTING_MODE: config.audio.routingMode,
         MIDI_DEVICE: config.midiDeviceName,
         OSC_HOST: config.osc.host,
         OSC_SEND_PORT: config.osc.sendPort,

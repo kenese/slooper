@@ -1,6 +1,7 @@
 {
   "name": "Traktor Kontrol Z1",
   "mode": "jack",
+  "routingMode": "send",
   "jack": {
     "cardNameIncludes": "Traktor Z1",
     "sampleRate": 48000,

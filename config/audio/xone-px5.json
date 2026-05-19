@@ -1,6 +1,7 @@
 {
   "name": "Allen & Heath XONE:PX5",
   "mode": "jack",
+  "routingMode": "send",
   "jack": {
     "cardNameIncludes": "XONE",
     "sampleRate": 48000,
@@ -29,16 +30,6 @@
         "id": "main",
         "label": "PX5 Main Out",
         "ports": ["system:playback_1", "system:playback_2"]
-      },
-      {
-        "id": "ch2",
-        "label": "PX5 Output 2",
-        "ports": ["system:playback_3", "system:playback_4"]
-      },
-      {
-        "id": "ch3",
-        "label": "PX5 Output 3",
-        "ports": ["system:playback_5", "system:playback_6"]
       }
     ]
   },

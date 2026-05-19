@@ -56,14 +56,32 @@ test('start.sh exposes colored success and error log helpers', () => {
     assert.match(source, /log_error\(\)/);
 });
 
-test('start.sh prints selected channel mode in green', () => {
+test('start.sh prints selected explicit audio routing mode in green', () => {
     const source = fs.readFileSync(path.join(__dirname, '../../start.sh'), 'utf8');
 
     assert.match(source, /runtime_mode_label\(\)/);
     assert.match(source, /echo "Send Mode"/);
-    assert.match(source, /echo "2 Channel Mode"/);
-    assert.match(source, /echo "4 Channel Mode"/);
+    assert.match(source, /echo "Channel Mode \(1 channel\)"/);
+    assert.match(source, /echo "Channel Mode \(\$CHANNELS channels\)"/);
     assert.match(source, /log_success "\$\(runtime_mode_label\)"/);
+});
+
+test('start.sh --print-config reports explicit channel routing mode', () => {
+    const output = execFileSync('bash', [
+        'start.sh',
+        '--print-config',
+        'audio-device=XONE_2C',
+        'midi-device=X1MK3_2C',
+        'channels=2',
+        'slots-per-channel=2',
+    ], {
+        cwd: projectRoot,
+        encoding: 'utf8',
+    });
+    const config = JSON.parse(output);
+
+    assert.equal(config.audio.routingMode, 'channel');
+    assert.equal(config.topology.channels, 2);
 });
 
 test('start script forwards topology arguments into runtime config', () => {
@@ -112,6 +130,8 @@ test('start.sh --print-config applies forwarded topology arguments', () => {
     const output = execFileSync('bash', [
         'start.sh',
         '--print-config',
+        'audio-device=MAC',
+        'midi-device=WEB',
         'channels=2',
         'slots-per-channel=4',
     ], {

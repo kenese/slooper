@@ -1,6 +1,7 @@
 {
   "name": "Generic JACK 1/2",
   "mode": "jack",
+  "routingMode": "send",
   "jack": {
     "cardNameIncludes": "",
     "sampleRate": 48000,
