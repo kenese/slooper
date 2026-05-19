@@ -57,6 +57,14 @@ The existing `mode` field should stay reserved for audio backend selection (`jac
 
 Slooper needs two MIDI interaction modes.
 
+MIDI mode is independent from audio routing mode. These combinations are all valid at the top level:
+- Send Mode + Simple MIDI
+- Send Mode + Custom MIDI
+- Channel Mode + Simple MIDI
+- Channel Mode + Custom MIDI
+
+Specific custom surfaces may declare their own compatibility requirements at startup, but the custom MIDI category must not imply Channel Mode. A hardware-specific surface can support both Send Mode and Channel Mode, or it can fail clearly if the selected topology does not match that surface's assumptions.
+
 ### Simple MIDI Mode
 
 Simple mode is the current behavior. Users map notes and CCs to direct actions in JSON:
@@ -89,21 +97,23 @@ The first custom surface should start as a duplicate of Simple mode to prove the
 
 ## Future X1MK3 2-Channel Custom Behavior
 
-The custom X1MK3 2-channel surface should support a per-channel selected auto-loop option.
+The custom X1MK3 2-channel surface should support selected auto-loop options in both audio routing modes if practical. In Send Mode there is one looper channel, so there is one selected auto-loop option and exclusive playback means one playing slot total. In Channel Mode there is one selected auto-loop option per looper channel, and exclusive playback applies within each channel.
 
 Rules:
-- Each channel has one set of four auto-loop selector buttons.
-- Exactly one auto-loop option is selected per channel at all times.
-- Startup selects option 1 for each channel.
+- Each looper channel has one set of four auto-loop selector buttons, or Send Mode has one global set for its single looper channel.
+- Exactly one auto-loop option is selected per looper channel at all times.
+- Startup selects option 1 for each looper channel.
 - The selected button is lit; the other three are off or dim.
 - Selecting an auto-loop option updates that channel state.
 - If a slot is currently playing in that channel, selecting the option immediately adjusts that playing loop length.
 - If no slot is playing, the selected option is stored.
 - `shift + slot record` applies the selected channel auto-loop length to that slot.
-- Only one slot should play per channel in this custom mode.
+- Only one slot should play per channel in this custom mode. In Send Mode, that means only one slot plays total.
 - Pressing another recorded slot in the same channel immediately switches playback to that slot and stops the previously playing slot.
 - Channel-level start/end encoders affect only the currently playing slot in that channel.
 - If no slot is playing, channel-level encoders do nothing at first.
+
+The `x1mk3-2channel` surface name describes the physical MIDI layout, not a requirement that the audio routing mode must be Channel Mode.
 
 Auto-loop labels can be controller-facing names while the controller dispatches the existing internal duration keys. For example, a user-facing "1 bar" option can dispatch `4beat` under the current 4/4 assumption.
 
@@ -144,6 +154,7 @@ Unit tests should cover config validation first:
 - existing configs normalize to explicit modes
 - simple MIDI configs select the simple surface
 - custom MIDI configs select the requested surface
+- custom MIDI configs can be used with Send Mode audio configs
 
 Surface tests should cover loader behavior before custom logic:
 - `simple` resolves to `simple_surface`

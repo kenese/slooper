@@ -4,7 +4,7 @@
 
 **Goal:** Add explicit Send/Channel audio routing modes and Simple/Custom MIDI surface modes while preserving current behavior.
 
-**Architecture:** Audio config gains a normalized looper routing mode separate from JACK/native-Pd backend mode. MIDI handling moves behind swappable surface modules, with Simple mode containing the current behavior and the initial X1MK3 custom surface delegating to Simple mode.
+**Architecture:** Audio config gains a normalized looper routing mode separate from JACK/native-Pd backend mode. MIDI mode is independent from audio routing mode, so Send/Channel and Simple/Custom combinations are valid unless a specific surface rejects an incompatible topology. MIDI handling moves behind swappable surface modules, with Simple mode containing the current behavior and the initial X1MK3 custom surface delegating to Simple mode.
 
 **Tech Stack:** Node.js CommonJS, `node:test`, `easymidi`, Pure Data generated host patch.
 
@@ -432,6 +432,38 @@ test('MIDI config can select custom surface mode', () => {
     assert.equal(config.midi.midiMode, 'custom');
     assert.equal(config.midi.surface, 'x1mk3-2channel');
 });
+
+test('custom MIDI mode can be used with send routing mode', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-custom-send-'));
+    const file = path.join(dir, 'custom-send.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Custom Send X1',
+        match: 'TRAKTOR X1 MK3',
+        midiMode: 'custom',
+        surface: 'x1mk3-2channel',
+        controls: {
+            slot1Button: { type: 'note', note: 1, channel: 0 },
+            slot2Button: { type: 'note', note: 2, channel: 0 },
+            slot1EndEncoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+            slot2EndEncoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
+            slot1Reset: { type: 'note', note: 3, channel: 0 },
+            slot2Reset: { type: 'note', note: 4, channel: 0 },
+            monitorButton: { type: 'note', note: 5, channel: 0 }
+        }
+    }));
+
+    const config = getRuntimeConfig({
+        midiConfigPath: file,
+        audioDevice: 'Z1',
+        platform: 'linux',
+        projectRoot: path.join(__dirname, '../..'),
+        channels: 1,
+    });
+
+    assert.equal(config.audio.routingMode, 'send');
+    assert.equal(config.midi.midiMode, 'custom');
+    assert.equal(config.midi.surface, 'x1mk3-2channel');
+});
 ```
 
 - [ ] **Step 2: Write failing surface loader tests**
@@ -575,6 +607,8 @@ module.exports = {
     loadMidiSurface,
 };
 ```
+
+Do not add generic config validation that blocks `midiMode: "custom"` in Send Mode. Surface-specific compatibility checks belong in the selected surface setup code, where the full runtime topology is available.
 
 - [ ] **Step 6: Run tests**
 
@@ -801,7 +835,7 @@ Slooper has two audio routing modes:
 Slooper has two MIDI modes:
 
 - `midiMode: "simple"`: JSON maps buttons and encoders directly to looper actions.
-- `midiMode: "custom"`: a named surface module owns controller-specific interaction behavior. `surface: "x1mk3-2channel"` currently delegates to Simple mode and is the staging point for the X1MK3 custom workflow.
+- `midiMode: "custom"`: a named surface module owns controller-specific interaction behavior. Custom MIDI can run in Send Mode or Channel Mode unless that specific surface rejects the selected topology. `surface: "x1mk3-2channel"` currently delegates to Simple mode and is the staging point for the X1MK3 custom workflow.
 ```
 
 - [ ] **Step 4: Run tests**
@@ -888,7 +922,17 @@ and:
 "surface": "x1mk3-2channel"
 ```
 
-- [ ] **Step 5: Commit verification doc updates if changed**
+- [ ] **Step 5: Confirm Custom MIDI Is Not Tied To Channel Mode**
+
+Run the unit test added in Task 3:
+
+```bash
+node --test test/unit/config.test.js --test-name-pattern "custom MIDI mode can be used with send routing mode"
+```
+
+Expected: PASS. The resolved config should have `audio.routingMode` set to `send` and `midi.surface` set to `x1mk3-2channel`.
+
+- [ ] **Step 6: Commit verification doc updates if changed**
 
 If verification required README or test expectation changes, commit them:
 
@@ -906,6 +950,7 @@ If no files changed, do not create a commit.
 After this refactor lands, create a separate plan for the real custom surface behavior:
 
 - Per-channel auto-loop selector state.
+- Send Mode support with one selected auto-loop option for the single looper channel.
 - Four mutually exclusive auto-loop buttons per channel.
 - MIDI LED brightness rendering for selected/unselected selector buttons.
 - Shift modifier.
