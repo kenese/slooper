@@ -237,7 +237,8 @@ else
         echo "JACK already running; Slooper will not stop it by default."
     fi
 
-    pd -nogui -jack -nomidi "$PD_PATCH_PATH" &
+    PD_AUDIO_CHANNELS="$((CHANNELS * 2))"
+    pd -nogui -jack -nomidi -inchannels "$PD_AUDIO_CHANNELS" -outchannels "$PD_AUDIO_CHANNELS" "$PD_PATCH_PATH" &
     write_pid "pd" "$!"
 
     echo "Waiting for Pure Data to register JACK ports..."

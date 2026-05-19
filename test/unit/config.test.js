@@ -213,6 +213,26 @@ test('legacy aliases resolve to bundled JSON configs', () => {
     assert.equal(config.midi.slot2.encoderCC, 21);
 });
 
+test('XONE_2C alias resolves to two-channel XONE routing', () => {
+    const config = getRuntimeConfig({
+        audioDevice: 'XONE_2C',
+        midiDevice: 'X1MK3',
+        platform: 'linux',
+        projectRoot: path.join(__dirname, '../..'),
+        channels: 2,
+        slotsPerChannel: 2,
+    });
+
+    assert.deepEqual(config.audio.capturePortPairs.map((pair) => pair.ports), [
+        ['system:capture_3', 'system:capture_4'],
+        ['system:capture_5', 'system:capture_6'],
+    ]);
+    assert.deepEqual(config.audio.playbackPortPairs.map((pair) => pair.ports), [
+        ['system:playback_3', 'system:playback_4'],
+        ['system:playback_5', 'system:playback_6'],
+    ]);
+});
+
 test('rejects MIDI configs missing required controls', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-'));
     const file = path.join(dir, 'bad.json');

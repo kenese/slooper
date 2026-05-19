@@ -67,6 +67,13 @@ test('start script connects configured JACK port pairs for each channel', () => 
     assert.doesNotMatch(source, /jack_connect "\$JACK_CAPTURE_LEFT" pure_data:input_1/);
 });
 
+test('start script opens enough Pure Data JACK ports for configured channels', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../start.sh'), 'utf8');
+
+    assert.match(source, /PD_AUDIO_CHANNELS="\$\(\(CHANNELS \* 2\)\)"/);
+    assert.match(source, /pd -nogui -jack -nomidi -inchannels "\$PD_AUDIO_CHANNELS" -outchannels "\$PD_AUDIO_CHANNELS" "\$PD_PATCH_PATH"/);
+});
+
 test('start.sh --print-config applies forwarded topology arguments', () => {
     const output = execFileSync('bash', [
         'start.sh',
