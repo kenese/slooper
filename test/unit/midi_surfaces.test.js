@@ -23,3 +23,21 @@ test('rejects unknown MIDI surface', () => {
         /Unknown MIDI surface: missing-surface/
     );
 });
+
+test('custom X1MK3 surface delegates setup to simple behavior initially', () => {
+    const calls = [];
+    const simple = {
+        name: 'simple',
+        setup(context) {
+            calls.push(context.marker);
+            return { controller: context.controller };
+        },
+    };
+    const surfaceFactory = require('../../src/controller/midi_surfaces/x1mk3_2channel_surface');
+    const surface = surfaceFactory.createForTest(simple);
+
+    const result = surface.setup({ marker: 'called', controller: { id: 1 } });
+
+    assert.deepEqual(calls, ['called']);
+    assert.deepEqual(result, { controller: { id: 1 } });
+});

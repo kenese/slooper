@@ -1,8 +1,15 @@
 const simpleSurface = require('./simple_surface');
 
+function createSurface(delegate) {
+    return {
+        name: 'x1mk3-2channel',
+        setup(context) {
+            return delegate.setup(context);
+        },
+    };
+}
+
 module.exports = {
-    name: 'x1mk3-2channel',
-    setup(context) {
-        return simpleSurface.setup(context);
-    },
+    ...createSurface(simpleSurface),
+    createForTest: createSurface,
 };
