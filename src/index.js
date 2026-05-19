@@ -8,6 +8,18 @@ const { OscTransport } = require('./controller/osc_transport');
 const { MidiClockTracker, TapTempoTracker, TempoSource } = require('./controller/tempo');
 const { createWebServer } = require('./controller/web_server');
 
+const GREEN = '\x1b[32m';
+const RED = '\x1b[31m';
+const RESET = '\x1b[0m';
+
+function logSuccess(message) {
+    console.log(`${GREEN}${message}${RESET}`);
+}
+
+function logError(message) {
+    console.error(`${RED}${message}${RESET}`);
+}
+
 const args = process.argv.slice(2);
 const midiArg = args.find((arg) => arg.startsWith('midi-device='));
 const audioArg = args.find((arg) => arg.startsWith('audio-device=') || arg.startsWith('device='));
@@ -38,13 +50,12 @@ const inputs = easymidi.getInputs();
 const inputIndex = inputs.findIndex((name) => name.toLowerCase().includes(midi.midiName.toLowerCase()));
 
 if (inputIndex === -1) {
-    console.error(`MIDI input device matching "${midi.midiName}" not found.`);
-    console.error('Available inputs:', inputs);
+    logError(`MIDI input device matching "${midi.midiName}" not found.`);
+    logError(`Available inputs: ${inputs.join(', ')}`);
     process.exit(1);
 }
 
 const inputDeviceName = inputs[inputIndex];
-console.log(`MIDI Input [${inputIndex}]: ${inputDeviceName}`);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -90,22 +101,22 @@ function openMidiOutput() {
     const outputIndex = outputs.findIndex((name) => name.toLowerCase().includes(midi.midiName.toLowerCase()));
 
     if (outputIndex === -1) {
-        console.warn('MIDI output device not found; LEDs disabled. Available:', outputs);
+        logError(`MIDI output device not found; LEDs disabled. Available: ${outputs.join(', ')}`);
         return null;
     }
 
     const outputDeviceName = outputs[outputIndex];
     try {
         const output = new easymidi.Output(outputIndex);
-        console.log(`MIDI Output [${outputIndex}]: ${outputDeviceName}`);
+        logSuccess(`MIDI Output [${outputIndex}]: ${outputDeviceName}`);
         return output;
     } catch (err) {
         try {
             const output = new easymidi.Output(outputDeviceName);
-            console.log(`MIDI Output: ${outputDeviceName}`);
+            logSuccess(`MIDI Output: ${outputDeviceName}`);
             return output;
         } catch (fallbackErr) {
-            console.warn(`Could not open MIDI output; LEDs disabled: ${fallbackErr.message}`);
+            logError(`Could not open MIDI output; LEDs disabled: ${fallbackErr.message}`);
             return null;
         }
     }
@@ -131,9 +142,10 @@ const transport = new OscTransport({
     let input;
     try {
         input = await openMidiInput();
+        logSuccess(`MIDI Input [${inputIndex}]: ${inputDeviceName}`);
     } catch (err) {
-        console.error(err.message);
-        console.error('Available inputs:', inputs);
+        logError(err.message);
+        logError(`Available inputs: ${inputs.join(', ')}`);
         transport.close();
         process.exit(1);
     }
@@ -155,10 +167,10 @@ const transport = new OscTransport({
         midiClock.onBeat = () => webServer.broadcast(controller.getState());
         webServer.listen(WEB_PORT, WEB_HOST)
             .then((port) => {
-                console.log(`Web controller: http://${WEB_HOST}:${port}`);
+                logSuccess(`Web controller: http://${WEB_HOST}:${port}`);
             })
             .catch((err) => {
-                console.error(`Web server failed to start on port ${WEB_PORT}: ${err.message}`);
+                logError(`Web server failed to start on port ${WEB_PORT}: ${err.message}`);
                 process.exit(1);
             });
     }

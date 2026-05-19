@@ -18,6 +18,9 @@ PRINT_CONFIG=false
 CHANNELS=1
 SLOTS_PER_CHANNEL=2
 WEB_ENABLED=false
+GREEN=$'\033[32m'
+RED=$'\033[31m'
+RESET=$'\033[0m'
 
 for arg in "$@"; do
     case "$arg" in
@@ -58,6 +61,31 @@ done
 mkdir -p "$PID_DIR"
 
 eval "$(node scripts/runtime_config.js --shell "$@" "channels=$CHANNELS" "slots-per-channel=$SLOTS_PER_CHANNEL")"
+
+log_success() {
+    printf "%b%s%b\n" "$GREEN" "$1" "$RESET"
+}
+
+log_error() {
+    printf "%b%s%b\n" "$RED" "$1" "$RESET" >&2
+}
+
+runtime_mode_label() {
+    case "$CHANNELS" in
+        1)
+            echo "Send Mode"
+            ;;
+        2)
+            echo "2 Channel Mode"
+            ;;
+        4)
+            echo "4 Channel Mode"
+            ;;
+        *)
+            echo "$CHANNELS Channel Mode"
+            ;;
+    esac
+}
 
 write_pid() {
     local name="$1"
@@ -155,9 +183,9 @@ check_web_port_available() {
         return
     fi
 
-    echo "Web controller port $web_port is already in use:"
+    log_error "Web controller port $web_port is already in use:"
     echo "$listeners"
-    echo "Stop the process using port $web_port or set SLOOPER_WEB_PORT to a free port before starting Slooper."
+    log_error "Stop the process using port $web_port or set SLOOPER_WEB_PORT to a free port before starting Slooper."
     exit 1
 }
 
@@ -197,7 +225,8 @@ echo "Stopping previously tracked Slooper processes..."
 tracked_cleanup
 check_web_port_available
 
-echo "Configuring audio for: $AUDIO_DEVICE"
+log_success "Configuring audio for: $AUDIO_DEVICE"
+log_success "$(runtime_mode_label)"
 if [ "$PD_GENERATE_RUNTIME_PATCH" = "1" ]; then
     node scripts/runtime_config.js --ensure-runtime-patch "$@" "channels=$CHANNELS" "slots-per-channel=$SLOTS_PER_CHANNEL"
 fi
@@ -222,10 +251,10 @@ else
         JACK_CARD="$(aplay -l 2>/dev/null | awk -v card_pattern="$JACK_CARD_NAME_INCLUDES" 'BEGIN { IGNORECASE=1 } $0 ~ card_pattern { sub(/:$/, "", $2); print $2; exit }')"
 
         if [ -n "$JACK_CARD" ]; then
-            echo "   Found $JACK_CARD_NAME_INCLUDES on card $JACK_CARD"
+            log_success "   Found $JACK_CARD_NAME_INCLUDES on card $JACK_CARD"
             JACK_DEVICE="hw:$JACK_CARD"
         else
-            echo "   Audio card matching '$JACK_CARD_NAME_INCLUDES' not found, trying hw:3"
+            log_error "   Audio card matching '$JACK_CARD_NAME_INCLUDES' not found, trying hw:3"
             JACK_DEVICE="hw:3"
         fi
 
@@ -236,6 +265,7 @@ else
     else
         echo "JACK already running; Slooper will not stop it by default."
     fi
+    log_success "JACK connected"
 
     PD_AUDIO_CHANNELS="$((CHANNELS * 2))"
     pd -nogui -jack -nomidi -inchannels "$PD_AUDIO_CHANNELS" -outchannels "$PD_AUDIO_CHANNELS" "$PD_PATCH_PATH" &
@@ -244,7 +274,7 @@ else
     echo "Waiting for Pure Data to register JACK ports..."
     for _ in {1..10}; do
         if jack_lsp 2>/dev/null | grep -q "pure_data"; then
-            echo "   Pure Data ports found."
+            log_success "   Pure Data ports found."
             break
         fi
         sleep 1
@@ -279,6 +309,34 @@ else
         disconnect_pd_output_connections "$PD_OUT_RIGHT"
     }
 
+    jack_port_connected() {
+        local source_port="$1"
+        local target_port="$2"
+        jack_lsp -c "$source_port" 2>/dev/null | awk -v target="$target_port" 'NR > 1 && $1 == target { found = 1 } END { exit found ? 0 : 1 }'
+    }
+
+    connect_jack_port() {
+        local source_port="$1"
+        local target_port="$2"
+        local label="$3"
+        local connect_error
+
+        if jack_port_connected "$source_port" "$target_port"; then
+            log_success "   $label connected: $source_port -> $target_port"
+            return
+        fi
+
+        if connect_error="$(jack_connect "$source_port" "$target_port" 2>&1)"; then
+            log_success "   $label connected: $source_port -> $target_port"
+            return
+        fi
+
+        log_error "   Warning: could not connect $source_port to $target_port"
+        if [ -n "$connect_error" ]; then
+            log_error "   $connect_error"
+        fi
+    }
+
     for ((i = 0; i < CHANNELS; i++)); do
         IFS=',' read -r CAPTURE_LEFT CAPTURE_RIGHT <<< "${CAPTURE_PAIRS[$i]}"
         IFS=',' read -r PLAYBACK_LEFT PLAYBACK_RIGHT <<< "${PLAYBACK_PAIRS[$i]}"
@@ -292,21 +350,21 @@ else
         echo "   Input: $CAPTURE_LEFT/$CAPTURE_RIGHT -> $PD_IN_LEFT/$PD_IN_RIGHT"
         echo "   Output: $PD_OUT_LEFT/$PD_OUT_RIGHT -> $PLAYBACK_LEFT/$PLAYBACK_RIGHT"
 
-        jack_connect "$CAPTURE_LEFT" "$PD_IN_LEFT" || echo "   Warning: could not connect $CAPTURE_LEFT to $PD_IN_LEFT"
-        jack_connect "$CAPTURE_RIGHT" "$PD_IN_RIGHT" || echo "   Warning: could not connect $CAPTURE_RIGHT to $PD_IN_RIGHT"
-        jack_connect "$PD_OUT_LEFT" "$PLAYBACK_LEFT" || echo "   Warning: could not connect $PD_OUT_LEFT to $PLAYBACK_LEFT"
-        jack_connect "$PD_OUT_RIGHT" "$PLAYBACK_RIGHT" || echo "   Warning: could not connect $PD_OUT_RIGHT to $PLAYBACK_RIGHT"
+        connect_jack_port "$CAPTURE_LEFT" "$PD_IN_LEFT" "Input"
+        connect_jack_port "$CAPTURE_RIGHT" "$PD_IN_RIGHT" "Input"
+        connect_jack_port "$PD_OUT_LEFT" "$PLAYBACK_LEFT" "Output"
+        connect_jack_port "$PD_OUT_RIGHT" "$PLAYBACK_RIGHT" "Output"
     done
 fi
 
 sleep 3
 
 if [ "$MIDI_DEVICE" = "OSC" ] || [ "$MIDI_DEVICE" = "WEB" ]; then
-    echo "Starting OSC web controller..."
-    echo "Open http://127.0.0.1:3000"
+    log_success "Starting OSC web controller..."
+    log_success "Open http://127.0.0.1:3000"
     node src/dev_controller.js "$@" &
 else
-    echo "Starting Node MIDI controller..."
+    log_success "Starting Node MIDI controller..."
     node src/index.js "$@" &
 fi
 

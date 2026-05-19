@@ -43,8 +43,27 @@ test('start.sh checks web port availability before launching Pure Data', () => {
     assert.match(startScript, /check_web_port_available\(\)/);
     assert.match(
         startScript,
-        /echo "Stopping previously tracked Slooper processes\.\.\."\ntracked_cleanup\ncheck_web_port_available\n\necho "Configuring audio for: \$AUDIO_DEVICE"/
+        /echo "Stopping previously tracked Slooper processes\.\.\."\ntracked_cleanup\ncheck_web_port_available\n\nlog_success "Configuring audio for: \$AUDIO_DEVICE"/
     );
+});
+
+test('start.sh exposes colored success and error log helpers', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../start.sh'), 'utf8');
+
+    assert.match(source, /GREEN=\$'\\033\[32m'/);
+    assert.match(source, /RED=\$'\\033\[31m'/);
+    assert.match(source, /log_success\(\)/);
+    assert.match(source, /log_error\(\)/);
+});
+
+test('start.sh prints selected channel mode in green', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../start.sh'), 'utf8');
+
+    assert.match(source, /runtime_mode_label\(\)/);
+    assert.match(source, /echo "Send Mode"/);
+    assert.match(source, /echo "2 Channel Mode"/);
+    assert.match(source, /echo "4 Channel Mode"/);
+    assert.match(source, /log_success "\$\(runtime_mode_label\)"/);
 });
 
 test('start script forwards topology arguments into runtime config', () => {
@@ -64,6 +83,8 @@ test('start script connects configured JACK port pairs for each channel', () => 
     assert.match(source, /for \(\(i = 0; i < CHANNELS; i\+\+\)\); do/);
     assert.match(source, /PD_IN_LEFT="pure_data:input_\$\(\(i \* 2 \+ 1\)\)"/);
     assert.match(source, /PD_OUT_RIGHT="pure_data:output_\$\(\(i \* 2 \+ 2\)\)"/);
+    assert.match(source, /connect_jack_port "\$CAPTURE_LEFT" "\$PD_IN_LEFT" "Input"/);
+    assert.match(source, /connect_jack_port "\$PD_OUT_RIGHT" "\$PLAYBACK_RIGHT" "Output"/);
     assert.doesNotMatch(source, /jack_connect "\$JACK_CAPTURE_LEFT" pure_data:input_1/);
 });
 
