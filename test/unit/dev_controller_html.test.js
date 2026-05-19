@@ -12,6 +12,13 @@ test('dev controller renders slots from state grouped by channel', () => {
     assert.doesNotMatch(html, /slot1Button[\s\S]*slot2Button/);
 });
 
+test('dev controller renders channel input/output labels and hides top input routing for multi-channel state', () => {
+    assert.match(html, /function renderChannelRouteLabel/);
+    assert.match(html, /Channel \$\{channelId\} uses \$\{channel\.inputLabel\} and \$\{channel\.outputLabel\}/);
+    assert.match(html, /function renderInputRouting\(state\)/);
+    assert.match(html, /state\.channels\.length > 1/);
+});
+
 test('dev controller exposes separate start and end crop controls', () => {
     assert.match(html, /Start Crop/);
     assert.match(html, /End Crop/);

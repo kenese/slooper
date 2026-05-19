@@ -221,6 +221,7 @@ function setupMidiHandlers(input, output) {
         slots: runtimeConfig.slots,
         tempo,
         inputSources: runtimeConfig.audio.captureSources,
+        outputDestinations: runtimeConfig.audio.playbackPortPairs,
         inputRouter: runtimeConfig.platform === 'linux' && runtimeConfig.audio.mode === 'jack'
             ? new JackCaptureRouter()
             : null,

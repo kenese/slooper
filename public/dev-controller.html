@@ -74,6 +74,10 @@
             gap: 12px;
         }
 
+        .channel-head .status {
+            max-width: 520px;
+        }
+
         .slots {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -387,6 +391,15 @@
         }, {});
     }
 
+    function renderChannelRouteLabel(channelId, state) {
+        const channel = (state.channels || []).find((item) => String(item.id) === String(channelId));
+        if (!channel || !channel.inputLabel || !channel.outputLabel) {
+            const slotCount = groupSlotsByChannel(state.slots)[channelId].length;
+            return `${slotCount} slots`;
+        }
+        return `Channel ${channelId} uses ${channel.inputLabel} and ${channel.outputLabel}`;
+    }
+
     function renderSlot(slot) {
         const stateLabel = slot.stateLabel || stateNames[slot.state] || 'Empty';
         const stateClass = stateLabel.toLowerCase();
@@ -432,7 +445,7 @@
             <section class="channel">
                 <div class="channel-head">
                     <h2>Channel ${channelId}</h2>
-                    <div class="status">${channelSlots.length} slots</div>
+                    <div class="status">${renderChannelRouteLabel(channelId, state)}</div>
                 </div>
                 <div class="slots">
                     ${channelSlots.map(renderSlot).join('')}
@@ -441,7 +454,12 @@
         `).join('');
     }
 
-    function renderInputRouting(inputRouting) {
+    function renderInputRouting(state) {
+        if (state.channels && state.channels.length > 1) {
+            return '';
+        }
+
+        const inputRouting = state.inputRouting;
         if (!inputRouting || inputRouting.sources.length === 0) {
             return '';
         }
@@ -579,7 +597,7 @@
 
     function render() {
         if (!appState) return;
-        document.getElementById('input-routing').innerHTML = renderInputRouting(appState.inputRouting);
+        document.getElementById('input-routing').innerHTML = renderInputRouting(appState);
         document.getElementById('slots').innerHTML = renderChannels(appState);
         renderTempo(appState.tempo);
         document.getElementById('monitor-status').textContent =

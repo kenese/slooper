@@ -67,6 +67,7 @@ class SlotController {
         this.monitorEnabled = true;
         this.monitorActive = true;
         this.inputSources = options.inputSources || [];
+        this.outputDestinations = options.outputDestinations || [];
         this.selectedInputSourceId = this.inputSources[0] ? this.inputSources[0].id : null;
         this.inputRouter = options.inputRouter || null;
     }
@@ -107,6 +108,8 @@ class SlotController {
             monitorActive: this.monitorActive,
             channels: this.getChannelIds().map((channelId) => ({
                 id: channelId,
+                inputLabel: this.getChannelInputLabel(channelId),
+                outputLabel: this.getChannelOutputLabel(channelId),
                 monitorEnabled: this.monitorEnabled,
                 monitorActive: this.isChannelMonitorActive(channelId),
             })),
@@ -129,6 +132,16 @@ class SlotController {
             slot.channelId === channelId && slot.state === SlotState.PLAYING
         ));
         return this.monitorEnabled && !anyPlaying;
+    }
+
+    getChannelInputLabel(channelId) {
+        const source = this.inputSources[Number(channelId) - 1];
+        return source ? source.label : null;
+    }
+
+    getChannelOutputLabel(channelId) {
+        const output = this.outputDestinations[Number(channelId) - 1];
+        return output ? output.label : null;
     }
 
     getTempoStatus() {

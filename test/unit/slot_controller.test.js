@@ -79,6 +79,34 @@ test('monitor state is independent per channel', async () => {
     assert.equal(controller.getState().channels[1].monitorActive, false);
 });
 
+test('getState includes configured input and output labels per channel', () => {
+    const transport = createFakeTransport();
+    const controller = createController({
+        transport,
+        slots: [
+            { id: 1, name: 'slot1', channelId: 1, indexInChannel: 1 },
+            { id: 2, name: 'slot2', channelId: 2, indexInChannel: 1 },
+        ],
+        inputSources: [
+            { id: 'ch1', label: 'PX5 Channel 2', ports: ['system:capture_3', 'system:capture_4'] },
+            { id: 'ch2', label: 'PX5 Channel 3', ports: ['system:capture_5', 'system:capture_6'] },
+        ],
+        outputDestinations: [
+            { id: 'ch1', label: 'PX5 USB Output 2', ports: ['system:playback_3', 'system:playback_4'] },
+            { id: 'ch2', label: 'PX5 USB Output 3', ports: ['system:playback_5', 'system:playback_6'] },
+        ],
+    });
+
+    assert.deepEqual(controller.getState().channels.map((channel) => ({
+        id: channel.id,
+        inputLabel: channel.inputLabel,
+        outputLabel: channel.outputLabel,
+    })), [
+        { id: 1, inputLabel: 'PX5 Channel 2', outputLabel: 'PX5 USB Output 2' },
+        { id: 2, inputLabel: 'PX5 Channel 3', outputLabel: 'PX5 USB Output 3' },
+    ]);
+});
+
 test('tapSlot records, stops recording, starts playback, and updates monitor', async () => {
     const transport = createFakeTransport();
     const controller = createController({ transport, now: () => 1000 });

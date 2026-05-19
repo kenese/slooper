@@ -9,12 +9,12 @@
     "capturePortPairs": [
       {
         "id": "ch1",
-        "label": "PX5 Channel 1",
+        "label": "PX5 Channel 2",
         "ports": ["system:capture_3", "system:capture_4"]
       },
       {
         "id": "ch2",
-        "label": "PX5 Channel 2",
+        "label": "PX5 Channel 3",
         "ports": ["system:capture_5", "system:capture_6"]
       }
     ],
@@ -22,12 +22,12 @@
     "playbackPortPairs": [
       {
         "id": "ch1",
-        "label": "PX5 Output 1",
+        "label": "PX5 USB Output 2",
         "ports": ["system:playback_3", "system:playback_4"]
       },
       {
         "id": "ch2",
-        "label": "PX5 Output 2",
+        "label": "PX5 USB Output 3",
         "ports": ["system:playback_5", "system:playback_6"]
       }
     ]
