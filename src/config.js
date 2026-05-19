@@ -522,14 +522,34 @@ function normalizeCaptureSourceControls(controls) {
         .map((name) => normalizeNoteControl(controls[name]));
 }
 
+function normalizeMidiMode(raw) {
+    if (raw.mode === 'virtual') {
+        return { midiMode: 'virtual', surface: 'virtual' };
+    }
+
+    const midiMode = raw.midiMode || 'simple';
+    if (!['simple', 'custom'].includes(midiMode)) {
+        throw new Error(`Unsupported MIDI mode: ${midiMode}`);
+    }
+
+    const surface = raw.surface || (midiMode === 'simple' ? 'simple' : undefined);
+    if (!surface) {
+        throw new Error('Custom MIDI mode requires a surface');
+    }
+
+    return { midiMode, surface };
+}
+
 function normalizeMidiConfig(raw) {
     validateMidiConfig(raw);
+    const midiModeConfig = normalizeMidiMode(raw);
 
     if (raw.mode === 'virtual') {
         return {
             name: raw.name,
             midiName: raw.match,
             mode: raw.mode,
+            ...midiModeConfig,
         };
     }
 
@@ -547,6 +567,7 @@ function normalizeMidiConfig(raw) {
     return {
         name: raw.name,
         midiName: raw.match,
+        ...midiModeConfig,
         controls,
         slots,
         slot1: slots.slot1,

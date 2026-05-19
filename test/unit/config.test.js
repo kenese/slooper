@@ -336,6 +336,80 @@ test('XONE_2C alias resolves to two-channel XONE routing', () => {
     ]);
 });
 
+test('MIDI configs default to simple MIDI mode and surface', () => {
+    const config = getRuntimeConfig({
+        midiDevice: 'XONE',
+        audioDevice: 'XONE',
+        platform: 'linux',
+        projectRoot: path.join(__dirname, '../..'),
+    });
+
+    assert.equal(config.midi.midiMode, 'simple');
+    assert.equal(config.midi.surface, 'simple');
+});
+
+test('MIDI config can select custom surface mode', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-custom-'));
+    const file = path.join(dir, 'custom.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Custom X1',
+        match: 'TRAKTOR X1 MK3',
+        midiMode: 'custom',
+        surface: 'x1mk3-2channel',
+        controls: {
+            slot1Button: { type: 'note', note: 1, channel: 0 },
+            slot2Button: { type: 'note', note: 2, channel: 0 },
+            slot1EndEncoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+            slot2EndEncoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
+            slot1Reset: { type: 'note', note: 3, channel: 0 },
+            slot2Reset: { type: 'note', note: 4, channel: 0 },
+            monitorButton: { type: 'note', note: 5, channel: 0 }
+        }
+    }));
+
+    const config = getRuntimeConfig({
+        midiConfigPath: file,
+        audioDevice: 'MAC',
+        platform: 'darwin',
+        projectRoot: path.join(__dirname, '../..'),
+    });
+
+    assert.equal(config.midi.midiMode, 'custom');
+    assert.equal(config.midi.surface, 'x1mk3-2channel');
+});
+
+test('custom MIDI mode can be used with send routing mode', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-custom-send-'));
+    const file = path.join(dir, 'custom-send.json');
+    fs.writeFileSync(file, JSON.stringify({
+        name: 'Custom Send X1',
+        match: 'TRAKTOR X1 MK3',
+        midiMode: 'custom',
+        surface: 'x1mk3-2channel',
+        controls: {
+            slot1Button: { type: 'note', note: 1, channel: 0 },
+            slot2Button: { type: 'note', note: 2, channel: 0 },
+            slot1EndEncoder: { type: 'cc', controller: 10, channel: 0, mode: 'relative-64' },
+            slot2EndEncoder: { type: 'cc', controller: 11, channel: 0, mode: 'relative-64' },
+            slot1Reset: { type: 'note', note: 3, channel: 0 },
+            slot2Reset: { type: 'note', note: 4, channel: 0 },
+            monitorButton: { type: 'note', note: 5, channel: 0 }
+        }
+    }));
+
+    const config = getRuntimeConfig({
+        midiConfigPath: file,
+        audioDevice: 'Z1',
+        platform: 'linux',
+        projectRoot: path.join(__dirname, '../..'),
+        channels: 1,
+    });
+
+    assert.equal(config.audio.routingMode, 'send');
+    assert.equal(config.midi.midiMode, 'custom');
+    assert.equal(config.midi.surface, 'x1mk3-2channel');
+});
+
 test('rejects MIDI configs missing required controls', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slooper-midi-'));
     const file = path.join(dir, 'bad.json');
