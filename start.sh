@@ -254,6 +254,16 @@ else
     IFS=';' read -r -a CAPTURE_PAIRS <<< "$JACK_CAPTURE_PORT_PAIRS"
     IFS=';' read -r -a PLAYBACK_PAIRS <<< "$JACK_PLAYBACK_PORT_PAIRS"
 
+    clear_pd_jack_port_connections() {
+        local port_index
+        for ((port_index = 1; port_index <= 32; port_index++)); do
+            jack_disconnect "system:capture_$port_index" "$PD_IN_LEFT" 2>/dev/null || true
+            jack_disconnect "system:capture_$port_index" "$PD_IN_RIGHT" 2>/dev/null || true
+            jack_disconnect "$PD_OUT_LEFT" "system:playback_$port_index" 2>/dev/null || true
+            jack_disconnect "$PD_OUT_RIGHT" "system:playback_$port_index" 2>/dev/null || true
+        done
+    }
+
     for ((i = 0; i < CHANNELS; i++)); do
         IFS=',' read -r CAPTURE_LEFT CAPTURE_RIGHT <<< "${CAPTURE_PAIRS[$i]}"
         IFS=',' read -r PLAYBACK_LEFT PLAYBACK_RIGHT <<< "${PLAYBACK_PAIRS[$i]}"
@@ -261,6 +271,8 @@ else
         PD_IN_RIGHT="pure_data:input_$((i * 2 + 2))"
         PD_OUT_LEFT="pure_data:output_$((i * 2 + 1))"
         PD_OUT_RIGHT="pure_data:output_$((i * 2 + 2))"
+
+        clear_pd_jack_port_connections
 
         echo "   Input: $CAPTURE_LEFT/$CAPTURE_RIGHT -> $PD_IN_LEFT/$PD_IN_RIGHT"
         echo "   Output: $PD_OUT_LEFT/$PD_OUT_RIGHT -> $PLAYBACK_LEFT/$PLAYBACK_RIGHT"
