@@ -78,9 +78,12 @@ test('start script clears automatic JACK links before applying configured routin
     const source = fs.readFileSync(path.join(__dirname, '../../start.sh'), 'utf8');
 
     assert.match(source, /clear_pd_jack_port_connections\(\)/);
-    assert.match(source, /for \(\(port_index = 1; port_index <= 32; port_index\+\+\)\); do/);
-    assert.match(source, /jack_disconnect "system:capture_\$port_index" "\$PD_IN_LEFT" 2>\/dev\/null \|\| true/);
-    assert.match(source, /jack_disconnect "\$PD_OUT_RIGHT" "system:playback_\$port_index" 2>\/dev\/null \|\| true/);
+    assert.doesNotMatch(source, /port_index <= 32/);
+    assert.match(source, /disconnect_pd_input_connections "\$PD_IN_LEFT"/);
+    assert.match(source, /disconnect_pd_output_connections "\$PD_OUT_RIGHT"/);
+    assert.match(source, /jack_lsp -c "\$pd_port"/);
+    assert.match(source, /jack_disconnect "\$connected_port" "\$pd_port"/);
+    assert.match(source, /jack_disconnect "\$pd_port" "\$connected_port"/);
     assert.match(source, /clear_pd_jack_port_connections\n\n        echo "   Input:/);
 });
 

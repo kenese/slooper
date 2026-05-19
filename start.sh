@@ -254,14 +254,29 @@ else
     IFS=';' read -r -a CAPTURE_PAIRS <<< "$JACK_CAPTURE_PORT_PAIRS"
     IFS=';' read -r -a PLAYBACK_PAIRS <<< "$JACK_PLAYBACK_PORT_PAIRS"
 
+    disconnect_pd_input_connections() {
+        local pd_port="$1"
+        local connected_port
+        while read -r connected_port; do
+            [ -n "$connected_port" ] || continue
+            jack_disconnect "$connected_port" "$pd_port" 2>/dev/null || true
+        done < <(jack_lsp -c "$pd_port" 2>/dev/null | awk 'NR > 1 { print $1 }')
+    }
+
+    disconnect_pd_output_connections() {
+        local pd_port="$1"
+        local connected_port
+        while read -r connected_port; do
+            [ -n "$connected_port" ] || continue
+            jack_disconnect "$pd_port" "$connected_port" 2>/dev/null || true
+        done < <(jack_lsp -c "$pd_port" 2>/dev/null | awk 'NR > 1 { print $1 }')
+    }
+
     clear_pd_jack_port_connections() {
-        local port_index
-        for ((port_index = 1; port_index <= 32; port_index++)); do
-            jack_disconnect "system:capture_$port_index" "$PD_IN_LEFT" 2>/dev/null || true
-            jack_disconnect "system:capture_$port_index" "$PD_IN_RIGHT" 2>/dev/null || true
-            jack_disconnect "$PD_OUT_LEFT" "system:playback_$port_index" 2>/dev/null || true
-            jack_disconnect "$PD_OUT_RIGHT" "system:playback_$port_index" 2>/dev/null || true
-        done
+        disconnect_pd_input_connections "$PD_IN_LEFT"
+        disconnect_pd_input_connections "$PD_IN_RIGHT"
+        disconnect_pd_output_connections "$PD_OUT_LEFT"
+        disconnect_pd_output_connections "$PD_OUT_RIGHT"
     }
 
     for ((i = 0; i < CHANNELS; i++)); do
