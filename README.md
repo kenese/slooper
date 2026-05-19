@@ -248,6 +248,16 @@ To change the number of slots, use `channels=` and `slots-per-channel=` at start
 
 Slooper's hardware setup is configured with JSON files. MIDI mappings and audio routing are separate so you can mix any supported controller with any supported soundcard.
 
+Slooper has two audio routing modes:
+
+- `routingMode: "send"`: one looper channel records from a send/source path and returns all playback through one stereo output.
+- `routingMode: "channel"`: each input channel has its own looper slots, monitor path, loop output, and stereo output pair. This mode can run with `channels=1` for Mac testing.
+
+Slooper has two MIDI modes:
+
+- `midiMode: "simple"`: JSON maps buttons and encoders directly to looper actions.
+- `midiMode: "custom"`: a named surface module owns controller-specific interaction behavior. Custom MIDI can run in Send Mode or Channel Mode unless that specific surface rejects the selected topology. `surface: "x1mk3-2channel"` currently delegates to Simple mode and is the staging point for the X1MK3 custom workflow.
+
 Bundled configs live in:
 
 ```text

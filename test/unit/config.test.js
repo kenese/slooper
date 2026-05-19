@@ -319,7 +319,7 @@ test('legacy aliases resolve to bundled JSON configs', () => {
 test('XONE_2C alias resolves to two-channel XONE routing', () => {
     const config = getRuntimeConfig({
         audioDevice: 'XONE_2C',
-        midiDevice: 'X1MK3',
+        midiDevice: 'X1MK3_2C',
         platform: 'linux',
         projectRoot: path.join(__dirname, '../..'),
         channels: 2,
@@ -334,6 +334,8 @@ test('XONE_2C alias resolves to two-channel XONE routing', () => {
         ['system:playback_3', 'system:playback_4'],
         ['system:playback_5', 'system:playback_6'],
     ]);
+    assert.equal(config.midi.midiMode, 'custom');
+    assert.equal(config.midi.surface, 'x1mk3-2channel');
 });
 
 test('MIDI configs default to simple MIDI mode and surface', () => {

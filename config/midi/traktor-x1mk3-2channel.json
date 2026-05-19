@@ -1,6 +1,8 @@
 {
   "name": "Native Instruments Traktor X1 MK3 - 2 Channel",
   "match": "TRAKTOR X1 MK3",
+  "midiMode": "custom",
+  "surface": "x1mk3-2channel",
   "controls": {
     "slot1Button": { "type": "note", "note": 10, "channel": 0 },
     "slot1Reset": { "type": "note", "note": 20, "channel": 0 },
