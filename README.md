@@ -248,15 +248,27 @@ To change the number of slots, use `channels=` and `slots-per-channel=` at start
 
 Slooper's hardware setup is configured with JSON files. MIDI mappings and audio routing are separate so you can mix any supported controller with any supported soundcard.
 
-Slooper has two audio routing modes:
+Audio routing mode and MIDI mode are independent. Pick one audio config and one MIDI config; a controller-specific MIDI surface does not imply Channel Mode.
 
-- `routingMode: "send"`: one looper channel records from a send/source path and returns all playback through one stereo output.
-- `routingMode: "channel"`: each input channel has its own looper slots, monitor path, loop output, and stereo output pair. This mode can run with `channels=1` for Mac testing.
+**Audio routing modes:**
 
-Slooper has two MIDI modes:
+- `routingMode: "send"`: one looper channel records from a send/source path and returns all playback through one stereo output. Use `channels=1`.
+- `routingMode: "channel"`: each input channel has its own looper slots, monitor path, loop output, and stereo output pair. Use `channels=1..4`; `channels=1` is useful for Mac testing.
+
+**MIDI modes:**
 
 - `midiMode: "simple"`: JSON maps buttons and encoders directly to looper actions.
 - `midiMode: "custom"`: a named surface module owns controller-specific interaction behavior. Custom MIDI can run in Send Mode or Channel Mode unless that specific surface rejects the selected topology. `surface: "x1mk3-2channel"` currently delegates to Simple mode and is the staging point for the X1MK3 custom workflow.
+- `midiMode: "virtual"`: browser/OSC control with no hardware MIDI port.
+
+Common mode combinations:
+
+| Use case | Command |
+| --- | --- |
+| Send Mode + Simple MIDI, PX5 send/return | `./start.sh audio-device=XONE midi-device=XONE channels=1 slots-per-channel=2` |
+| Send Mode + Simple MIDI, Z1 + X1 MK3 | `./start.sh audio-device=Z1 midi-device=X1MK3 channels=1 slots-per-channel=2` |
+| Channel Mode + Virtual MIDI, Mac dev | `./start.sh audio-device=MAC midi-device=WEB channels=1 slots-per-channel=2` |
+| Channel Mode + Custom MIDI, PX5 2-channel + X1 MK3 | `./start.sh audio-device=XONE_2C midi-device=X1MK3_2C channels=2 slots-per-channel=2` |
 
 Bundled configs live in:
 
@@ -264,12 +276,14 @@ Bundled configs live in:
 config/
   audio/
     xone-px5.json
+    xone-px5-2channel.json
     traktor-z1.json
     blackhole-mac.json
     generic-jack-1-2.json
   midi/
     xone-px5.json
     traktor-x1mk3.json
+    traktor-x1mk3-2channel.json
     osc.json
     web.json
     example.json
@@ -280,6 +294,7 @@ Use explicit config files:
 ```bash
 ./start.sh --midi-config=config/midi/xone-px5.json --audio-config=config/audio/xone-px5.json
 ./start.sh --midi-config=config/midi/traktor-x1mk3.json --audio-config=config/audio/traktor-z1.json
+./start.sh --midi-config=config/midi/traktor-x1mk3-2channel.json --audio-config=config/audio/xone-px5-2channel.json channels=2 slots-per-channel=2
 ./start.sh --midi-config=config/midi/example.json --audio-config=config/audio/generic-jack-1-2.json
 ```
 
@@ -293,8 +308,15 @@ The older aliases still work and resolve to the bundled JSON files:
 # Traktor X1 MK3
 ./start.sh midi-device=X1MK3
 
+# Traktor X1 MK3 2-channel custom surface.
+# This currently delegates to Simple mode behavior.
+./start.sh midi-device=X1MK3_2C
+
 # Browser OSC controller for Mac dev
 ./start.sh midi-device=OSC
+
+# Browser web controller
+./start.sh midi-device=WEB
 ```
 
 **Select Audio Device:**
@@ -309,21 +331,25 @@ The older aliases still work and resolve to the bundled JSON files:
 
 # Mac/BlackHole dev
 ./start.sh device=MAC
+
+# XONE:PX5 2-channel insert routing
+./start.sh audio-device=XONE_2C channels=2 slots-per-channel=2
 ```
 
 Inspect the resolved runtime config without starting anything:
 
 ```bash
-./start.sh --print-config device=MAC midi-device=OSC
+./start.sh --print-config audio-device=XONE midi-device=XONE channels=1 slots-per-channel=2
+./start.sh --print-config device=MAC midi-device=WEB channels=1 slots-per-channel=2
+./start.sh --print-config audio-device=XONE_2C midi-device=X1MK3_2C channels=2 slots-per-channel=2
 ./start.sh --print-config --midi-config=config/midi/example.json --audio-config=config/audio/generic-jack-1-2.json
-./start.sh --print-config channels=2 slots-per-channel=4
 ```
 
 **Combine Arguments:**
 ```bash
 ./start.sh midi-device=X1MK3 audio-device=Z1
-./start.sh device=MAC midi-device=OSC
-./start.sh audio-device=XONE midi-device=X1MK3 channels=2 slots-per-channel=2
+./start.sh device=MAC midi-device=WEB channels=1 slots-per-channel=2
+./start.sh audio-device=XONE_2C midi-device=X1MK3_2C channels=2 slots-per-channel=2
 ```
 
 To add a new MIDI controller, copy `config/midi/example.json` and update the `match` string plus note/CC values. MIDI configs can define a dynamic `controls.slots` map keyed by global slot name (`slot1`, `slot2`, etc.). Legacy two-slot fields are still supported:
