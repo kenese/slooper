@@ -39,6 +39,18 @@ test('start.sh force cleanup stops Slooper MIDI diagnostics that can hold ALSA p
     assert.match(startScript, /pkill -f "node src\/midi_logger\.js" 2>\/dev\/null \|\| true/);
 });
 
+test('start.sh disables JACK audio reservation for headless startup', () => {
+    assert.match(startScript, /export JACK_NO_AUDIO_RESERVATION="\$\{JACK_NO_AUDIO_RESERVATION:-1\}"/);
+    assert.match(startScript, /jackd -d alsa -d "\$JACK_DEVICE"/);
+});
+
+test('start.sh verifies JACK server is reachable before launching Pure Data', () => {
+    assert.match(startScript, /wait_for_jack_server\(\)/);
+    assert.match(startScript, /if ! wait_for_jack_server; then/);
+    assert.match(startScript, /log_error "JACK failed to start or is not reachable\. Aborting before Pure Data startup\."/);
+    assert.match(startScript, /jack_lsp >\/dev\/null 2>\&1/);
+});
+
 test('start.sh checks web port availability before launching Pure Data', () => {
     assert.match(startScript, /check_web_port_available\(\)/);
     assert.match(

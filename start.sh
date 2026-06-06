@@ -182,6 +182,21 @@ check_web_port_available() {
     exit 1
 }
 
+wait_for_jack_server() {
+    local attempts="${1:-10}"
+    local attempt=1
+
+    while [ "$attempt" -le "$attempts" ]; do
+        if jack_lsp >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+
+    return 1
+}
+
 if [ "$PRINT_CONFIG" = true ]; then
     node scripts/runtime_config.js --json "$@" "channels=$CHANNELS" "slots-per-channel=$SLOTS_PER_CHANNEL"
     exit 0
@@ -252,12 +267,18 @@ else
         fi
 
         echo "   Latency target: $JACK_PERIOD_SIZE frames x $JACK_PERIODS periods @ ${JACK_SAMPLE_RATE}Hz"
+        export JACK_NO_AUDIO_RESERVATION="${JACK_NO_AUDIO_RESERVATION:-1}"
         jackd -d alsa -d "$JACK_DEVICE" -r "$JACK_SAMPLE_RATE" -p "$JACK_PERIOD_SIZE" -n "$JACK_PERIODS" &
         write_pid "jack" "$!"
-        sleep 3
     else
         echo "JACK already running; Slooper will not stop it by default."
     fi
+
+    if ! wait_for_jack_server; then
+        log_error "JACK failed to start or is not reachable. Aborting before Pure Data startup."
+        exit 1
+    fi
+
     log_success "JACK connected"
 
     PD_AUDIO_CHANNELS="$((CHANNELS * 2))"
